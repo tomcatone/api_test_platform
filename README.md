@@ -45,8 +45,8 @@ REM 启动服务
 python manage.py runserver 0.0.0.0:8000
 ```
 
-浏览器访问：http://127.0.0.1:8000
-
+瀏覽器訪問：http://127.0.0.1:8000
+默認管理賬戶和密碼admin admin123
 ---
 
 ## ⚠️ Windows 常见问题
