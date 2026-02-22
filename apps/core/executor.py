@@ -13,11 +13,13 @@ import re
 import os
 import json
 import time
+import random
 import base64
 import hashlib
 import asyncio
 import logging
 import threading
+import datetime
 
 import requests
 import httpx
@@ -53,8 +55,11 @@ def get_runtime_vars() -> dict:
 
 
 def load_global_vars() -> dict:
-    from apps.core.models import GlobalVariable
+    from apps.core.models import GlobalVariable, DynamicVar
     db_vars = {v.name: v.value for v in GlobalVariable.objects.all()}
+    # 每次調用都重新生成啟用的動態變量（保證每次請求都是新值）
+    for dv in DynamicVar.objects.filter(enabled=True):
+        db_vars[dv.name] = dv.generate()
     with _runtime_lock:
         db_vars.update(_runtime_vars)
     return db_vars
@@ -546,12 +551,54 @@ def _run_async_coro(coro):
 
 # ── 核心執行 ─────────────────────────────────────────
 
+
+# ── 內建動態變量（每次請求重新生成）─────────────────
+# 使用方式：在 Body / Params / Headers / URL 中直接填 {{變量名}}
+#
+#  {{rand_mobile}}   → 隨機中國手機號，如 13812345678
+#  {{timestamp}}     → 當前 Unix 時間戳（秒），如 1708600000
+#  {{timestamp_ms}}  → 當前 Unix 時間戳（毫秒），如 1708600000123
+#  {{datetime}}      → 當前日期時間字符串，如 2026-02-22 14:30:00
+#  {{date}}          → 當前日期，如 2026-02-22
+#  {{rand_int}}      → 隨機 6 位整數，如 483921
+#  {{rand_str}}      → 隨機 8 位字母數字字符串，如 aB3xQk9Z
+
+_MOBILE_PREFIXES = [
+    '130','131','132','133','134','135','136','137','138','139',
+    '147','150','151','152','153','155','156','157','158','159',
+    '166','170','171','172','173','175','176','177','178',
+    '180','181','182','183','184','185','186','187','188','189',
+    '191','192','193','195','196','197','198','199',
+]
+
+def _gen_dynamic_vars() -> dict:
+    """每次調用都返回全新生成的內建變量，確保每個請求獨立。"""
+    now = datetime.datetime.now()
+    prefix = random.choice(_MOBILE_PREFIXES)
+    mobile = prefix + str(random.randint(10000000, 99999999))
+    rand_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    return {
+        'rand_mobile':   mobile,
+        'timestamp':     str(int(now.timestamp())),
+        'timestamp_ms':  str(int(now.timestamp() * 1000)),
+        'datetime':      now.strftime('%Y-%m-%d %H:%M:%S'),
+        'date':          now.strftime('%Y-%m-%d'),
+        'rand_int':      str(random.randint(100000, 999999)),
+        'rand_str':      ''.join(random.choices(rand_chars, k=8)),
+    }
+
+
 def execute_api(api_config, extra_vars: dict = None) -> dict:
     from apps.core.db_utils import execute_sql_statements, run_db_assertions
 
     variables = load_global_vars()
+    # ── 注入內建動態變量（優先級最低，用戶全局變量可覆蓋）──
+    dynamic = _gen_dynamic_vars()
+    for k, v in dynamic.items():
+        if k not in variables:          # 不覆蓋用戶已設置的同名全局變量
+            variables[k] = v
     if extra_vars:
-        variables.update(extra_vars)
+        variables.update(extra_vars)    # extra_vars 優先級最高
 
     # ── Step 1: 前置 Redis 取值（必須最先執行，讓注入的變量能在 body/params/url 中使用）──
     pre_redis_log = []

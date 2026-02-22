@@ -182,6 +182,21 @@
   <div class="ph"><h1 class="pt"><i class="fas fa-key me-2 text-primary"></i>全局變量 / Token</h1>
     <div class="d-flex gap-2"><button class="btn btn-warning btn-sm" onclick="openTokModal()"><i class="fas fa-magic me-1"></i>生成Token</button><button class="btn btn-primary btn-sm" onclick="openVarModal()"><i class="fas fa-plus me-1"></i>添加</button></div></div>
   <div class="alert alert-info py-2 mb-3 small"><i class="fas fa-info-circle me-1"></i>在 URL / Headers / Body / SQL / Redis Key 中使用 <code>{{變量名}}</code> 引用變量</div>
+
+  <!-- 動態變量區塊 -->
+  <div class="card mb-4 border-warning">
+    <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:rgba(251,191,36,.1)">
+      <span class="fw-bold"><i class="fas fa-bolt me-1 text-warning"></i>動態變量 <small class="text-muted fw-normal">— 每次接口請求前自動重新生成，直接用 <code>{{變量名}}</code> 引用</small></span>
+      <button class="btn btn-warning btn-sm" onclick="openDynVarModal()"><i class="fas fa-plus me-1"></i>添加動態變量</button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table mb-0">
+        <thead><tr><th style="width:40px">啟用</th><th>變量名</th><th>類型</th><th>當前預覽值</th><th>備註</th><th style="width:100px">操作</th></tr></thead>
+        <tbody id="dynVarTb"><tr><td colspan="6" class="text-center text-muted py-3">加載中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="tw"><table class="table"><thead><tr><th>變量名</th><th>類型</th><th>值</th><th>描述</th><th>更新</th><th>操作</th></tr></thead>
   <tbody id="varTb"></tbody></table>
   <div class="pgw"><div class="text-muted small" id="varTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="varPg"></ul></nav></div></div>
@@ -417,6 +432,18 @@
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tRedis">前置Redis<span class="badge bg-danger ms-1" style="font-size:.6rem">RD</span></a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tEnc">加密 <span class="badge bg-danger" style="font-size:.6rem">GCM</span></a></li>
     </ul>
+    <!-- 內建動態變量提示（每次請求自動生成，可在任意欄位使用） -->
+    <div class="d-flex flex-wrap gap-1 px-1 py-2 border border-top-0 border-bottom-0" style="background:#f8f9ff">
+      <span class="text-muted" style="font-size:.72rem;line-height:2">內建變量：</span>
+      <code class="badge bg-secondary" title="隨機中國手機號 如13812345678" style="cursor:default">{{rand_mobile}}</code>
+      <code class="badge bg-secondary" title="Unix時間戳（秒）" style="cursor:default">{{timestamp}}</code>
+      <code class="badge bg-secondary" title="Unix時間戳（毫秒）" style="cursor:default">{{timestamp_ms}}</code>
+      <code class="badge bg-secondary" title="當前日期時間 如2026-02-22 14:30:00" style="cursor:default">{{datetime}}</code>
+      <code class="badge bg-secondary" title="當前日期 如2026-02-22" style="cursor:default">{{date}}</code>
+      <code class="badge bg-secondary" title="隨機6位整數" style="cursor:default">{{rand_int}}</code>
+      <code class="badge bg-secondary" title="隨機8位字母數字" style="cursor:default">{{rand_str}}</code>
+      <span class="text-muted ms-1" style="font-size:.7rem;line-height:2">每次請求重新生成 · 點擊複製</span>
+    </div>
     <div class="tab-content p-3 border border-top-0 rounded-bottom" style="max-height:340px;overflow-y:auto">
       <div class="tab-pane fade show active" id="tH">
         <div class="fst">請求頭 (JSON)</div>
@@ -550,6 +577,31 @@
     <div class="mb-2"><label class="form-label">描述</label><input type="text" class="form-control" id="catDesc"></div>
   </div>
   <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveCat()">保存</button></div>
+</div></div></div>
+
+<!-- DynVar Modal -->
+<div class="modal fade" id="dynVarModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="dynVarMT">添加動態變量</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="dynVarId">
+    <div class="mb-2"><label class="form-label">變量名 * <small class="text-muted">（用 {{變量名}} 引用）</small></label>
+      <input type="text" class="form-control" id="dynVarName" placeholder="mobile / ts / uid"></div>
+    <div class="mb-2"><label class="form-label">類型 *</label>
+      <select class="form-select" id="dynVarType">
+        <option value="phone">🇨🇳 隨機中國手機號</option>
+        <option value="timestamp">⏱ 當前時間戳（秒）</option>
+        <option value="timestamp_ms">⏱ 當前時間戳（毫秒）</option>
+        <option value="datetime">📅 當前日期時間（yyyy-MM-dd HH:mm:ss）</option>
+        <option value="date">📅 當前日期（yyyy-MM-dd）</option>
+        <option value="uuid">🔑 隨機 UUID</option>
+      </select></div>
+    <div class="mb-2"><label class="form-label">備註</label>
+      <input type="text" class="form-control" id="dynVarDesc" placeholder="用途說明"></div>
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" id="dynVarEnabled" checked>
+      <label class="form-check-label">啟用（每次請求前自動生成）</label>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-warning btn-sm" onclick="saveDynVar()">保存</button></div>
 </div></div></div>
 
 <!-- Var Modal -->
@@ -745,7 +797,7 @@ function go(name) {
     dashboard: loadDash,
     apis: () => { loadCats(); loadApis(); },
     categories: loadCats,
-    variables: loadVars,
+    variables: () => { loadVars(); loadDynVars(); },
     databases: loadDbs,
     redis: loadRedis,
     redis_tool: loadRdTool,
@@ -1301,6 +1353,62 @@ function showRun(data) {
   h += '<div><strong>響應體：</strong><div class="rb mt-1">'+hl(data.response_body)+'</div></div>';
   $('runBody').innerHTML = h;
   bootstrap.Modal.getOrCreateInstance($('runModal')).show();
+}
+
+// ══════════ 動態變量 ══════════
+async function loadDynVars() {
+  const r = await R('GET', '/api/dynamic-vars/');
+  if (r.code !== 0) return;
+  const items = r.data.items || [];
+  const typeColors = {phone:'success',timestamp:'primary',timestamp_ms:'primary',datetime:'info',date:'info',uuid:'secondary'};
+  $('dynVarTb').innerHTML = items.length ? items.map(v =>
+    '<tr>' +
+    '<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" '+(v.enabled?'checked':'')+
+      ' onchange="toggleDynVar('+v.id+',this)"></div></td>' +
+    '<td><code class="text-warning">{{'+eh(v.name)+'}}</code></td>' +
+    '<td><span class="badge bg-'+( typeColors[v.dyn_type]||'secondary')+'" style="font-size:.72rem">'+eh(v.type_label)+'</span></td>' +
+    '<td class="text-muted small font-monospace">'+eh(v.preview)+'</td>' +
+    '<td class="text-muted small">'+eh(v.description||'-')+'</td>' +
+    '<td><button class="btn bi btn-outline-primary btn-sm me-1" onclick="editDynVar('+v.id+')" title="編輯"><i class="fas fa-edit fa-xs"></i></button>' +
+    '<button class="btn bi btn-outline-danger btn-sm" onclick="delDynVar('+v.id+')" title="刪除"><i class="fas fa-trash fa-xs"></i></button></td>' +
+    '</tr>'
+  ).join('') : '<tr><td colspan="6" class="text-center text-muted py-3">暫無動態變量，點擊「添加動態變量」創建</td></tr>';
+}
+function openDynVarModal() {
+  ['dynVarId','dynVarName','dynVarDesc'].forEach(id=>{ const e=$(id); if(e) e.value=''; });
+  $('dynVarType').value='phone'; $('dynVarEnabled').checked=true;
+  $('dynVarMT').textContent='添加動態變量';
+  bootstrap.Modal.getOrCreateInstance($('dynVarModal')).show();
+}
+async function editDynVar(id) {
+  const r = await R('GET','/api/dynamic-vars/'+id+'/'); if(r.code!==0){toast(r.message,'danger');return;}
+  const v = r.data;
+  $('dynVarId').value=v.id; $('dynVarName').value=v.name; $('dynVarType').value=v.dyn_type;
+  $('dynVarDesc').value=v.description||''; $('dynVarEnabled').checked=v.enabled;
+  $('dynVarMT').textContent='編輯動態變量';
+  bootstrap.Modal.getOrCreateInstance($('dynVarModal')).show();
+}
+async function saveDynVar() {
+  const id = $('dynVarId').value;
+  const body = {
+    name: $('dynVarName').value.trim(), dyn_type: $('dynVarType').value,
+    enabled: $('dynVarEnabled').checked, description: $('dynVarDesc').value.trim()
+  };
+  if (!body.name) { toast('請填寫變量名','warning'); return; }
+  const r = id ? await R('PUT','/api/dynamic-vars/'+id+'/',body) : await R('POST','/api/dynamic-vars/',body);
+  if (r.code===0) {
+    toast(r.message); bootstrap.Modal.getInstance($('dynVarModal'))?.hide(); loadDynVars();
+  } else { toast(r.message,'danger'); }
+}
+async function delDynVar(id) {
+  if (!confirm('確認刪除此動態變量？')) return;
+  const r = await R('DELETE','/api/dynamic-vars/'+id+'/');
+  r.code===0 ? (toast('已刪除'), loadDynVars()) : toast(r.message,'danger');
+}
+async function toggleDynVar(id, cb) {
+  const r = await R('POST','/api/dynamic-vars/'+id+'/toggle/');
+  if (r.code===0) { toast(r.message); loadDynVars(); }
+  else { cb.checked = !cb.checked; toast(r.message,'danger'); }
 }
 
 // ══════════ VARIABLES ══════════
@@ -1890,6 +1998,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (apiBodyType) apiBodyType.addEventListener('change', updBodyTypeHint);
   const apiMth = $('apiMth');
   if (apiMth) apiMth.addEventListener('change', togApiBody);
+  // 內建動態變量 badge 點擊複製
+  document.querySelectorAll('.badge[title] code, code.badge[title]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      navigator.clipboard.writeText(el.textContent).then(() => toast('已複製 ' + el.textContent));
+    });
+  });
 });
 </script>
 </body>

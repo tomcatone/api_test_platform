@@ -44,6 +44,59 @@ class GlobalVariable(models.Model):
         return f'{self.name} = {self.value[:50]}'
 
 
+class DynamicVar(models.Model):
+    """動態變量 — 每次接口請求前自動重新生成"""
+    TYPE_CHOICES = [
+        ('phone',     '🇨🇳 隨機中國手機號'),
+        ('timestamp', '⏱ 當前時間戳（秒）'),
+        ('timestamp_ms', '⏱ 當前時間戳（毫秒）'),
+        ('datetime',  '📅 當前日期時間（yyyy-MM-dd HH:mm:ss）'),
+        ('date',      '📅 當前日期（yyyy-MM-dd）'),
+        ('uuid',      '🔑 隨機 UUID'),
+    ]
+    name        = models.CharField(max_length=100, unique=True, verbose_name='變量名（{{name}}）')
+    dyn_type    = models.CharField(max_length=30, choices=TYPE_CHOICES, default='phone', verbose_name='類型')
+    enabled     = models.BooleanField(default=True, verbose_name='啟用（每次請求前生成）')
+    description = models.TextField(blank=True, default='', verbose_name='備註')
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '動態變量'
+        verbose_name_plural = '動態變量'
+        ordering = ['name']
+
+    def generate(self) -> str:
+        """生成當次的值"""
+        import random, time, uuid as uuid_mod
+        from datetime import datetime
+        if self.dyn_type == 'phone':
+            prefixes = ['130','131','132','133','134','135','136','137','138','139',
+                        '150','151','152','153','155','156','157','158','159',
+                        '170','171','172','173','175','176','177','178',
+                        '180','181','182','183','184','185','186','187','188','189',
+                        '191','192','193','195','196','197','198','199']
+            return random.choice(prefixes) + str(random.randint(10000000, 99999999))
+        elif self.dyn_type == 'timestamp':
+            return str(int(time.time()))
+        elif self.dyn_type == 'timestamp_ms':
+            return str(int(time.time() * 1000))
+        elif self.dyn_type == 'datetime':
+            return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        elif self.dyn_type == 'date':
+            return datetime.now().strftime('%Y-%m-%d')
+        elif self.dyn_type == 'uuid':
+            return str(uuid_mod.uuid4())
+        return ''
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'name': self.name, 'dyn_type': self.dyn_type,
+            'enabled': self.enabled, 'description': self.description,
+            'type_label': dict(self.TYPE_CHOICES).get(self.dyn_type, self.dyn_type),
+            'preview': self.generate(),
+        }
+
+
 class DatabaseConfig(models.Model):
     """MySQL 數據庫連接配置"""
     name        = models.CharField(max_length=100, unique=True, verbose_name='配置名稱')

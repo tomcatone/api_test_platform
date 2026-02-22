@@ -8,6 +8,9 @@ urlpatterns = [
     # 全局變量
     path('variables/',                 views.variable_list,   name='variable-list'),
     path('variables/<int:pk>/',        views.variable_detail, name='variable-detail'),
+    path('dynamic-vars/',              views.dynamic_var_list,   name='dynamic-var-list'),
+    path('dynamic-vars/<int:pk>/',     views.dynamic_var_detail, name='dynamic-var-detail'),
+    path('dynamic-vars/<int:pk>/toggle/', views.dynamic_var_toggle, name='dynamic-var-toggle'),
     path('variables/token/generate/',  views.generate_token,  name='token-generate'),
     # MySQL
     path('db/configs/',                views.db_config_list,   name='db-config-list'),

@@ -81,8 +81,69 @@ def category_detail(request, pk):
 #  全局變量 CRUD
 # ═══════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════
+#  動態變量 CRUD
+# ═══════════════════════════════════════════════
+
+@csrf_exempt
+def dynamic_var_list(request):
+    from .models import DynamicVar
+    if request.method == 'GET':
+        items = [dv.to_dict() for dv in DynamicVar.objects.all()]
+        return success({'items': items, 'total': len(items)})
+    elif request.method == 'POST':
+        body = parse_body(request)
+        name = body.get('name', '').strip()
+        if not name:
+            return error('變量名不能為空')
+        if DynamicVar.objects.filter(name=name).exists():
+            return error(f'變量名 {name} 已存在')
+        dv = DynamicVar.objects.create(
+            name=name,
+            dyn_type=body.get('dyn_type', 'phone'),
+            enabled=bool(body.get('enabled', True)),
+            description=body.get('description', ''),
+        )
+        return success(dv.to_dict(), '創建成功')
+
+@csrf_exempt
+def dynamic_var_detail(request, pk):
+    from .models import DynamicVar
+    try:
+        dv = DynamicVar.objects.get(pk=pk)
+    except DynamicVar.DoesNotExist:
+        return error('不存在')
+    if request.method == 'GET':
+        return success(dv.to_dict())
+    elif request.method == 'PUT':
+        body = parse_body(request)
+        dv.name        = body.get('name', dv.name).strip()
+        dv.dyn_type    = body.get('dyn_type', dv.dyn_type)
+        dv.enabled     = bool(body.get('enabled', dv.enabled))
+        dv.description = body.get('description', dv.description)
+        dv.save()
+        return success(dv.to_dict(), '更新成功')
+    elif request.method == 'DELETE':
+        dv.delete()
+        return success(message='刪除成功')
+
+@csrf_exempt
+def dynamic_var_toggle(request, pk):
+    """快速切換啟用/停用"""
+    from .models import DynamicVar
+    if request.method != 'POST':
+        return error('方法不允許')
+    try:
+        dv = DynamicVar.objects.get(pk=pk)
+    except DynamicVar.DoesNotExist:
+        return error('不存在')
+    dv.enabled = not dv.enabled
+    dv.save()
+    return success(dv.to_dict(), f'已{"啟用" if dv.enabled else "停用"}')
+
 @csrf_exempt
 def variable_list(request):
+    from .models import GlobalVariable
     if request.method == 'GET':
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 10))
