@@ -47,4 +47,12 @@ urlpatterns = [
     # 報告
     path('reports/',           views.report_list,    name='report-list'),
     path('reports/<int:pk>/',  views.report_detail,  name='report-detail'),
+    # 認證
+    path('auth/login/',           views.auth_login_view,    name='auth-login'),
+    path('auth/logout/',          views.auth_logout_view,   name='auth-logout'),
+    path('auth/me/',              views.auth_me,            name='auth-me'),
+    path('auth/change-password/', views.auth_change_password, name='auth-change-password'),
+    # 賬戶管理（管理員）
+    path('accounts/',             views.account_list,   name='account-list'),
+    path('accounts/<int:pk>/',    views.account_detail, name='account-detail'),
 ]

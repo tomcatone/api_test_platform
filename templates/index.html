@@ -19,6 +19,15 @@
 .nb:hover{background:rgba(99,102,241,.15);color:#e0e7ff}.nb.active{background:rgba(99,102,241,.25);color:#fff;border-left-color:#818cf8}
 .nb i{width:15px;text-align:center}
 .sb-foot{padding:8px 14px;border-top:1px solid rgba(255,255,255,.1);font-size:.68rem;color:#6366f1}
+.sb-user{padding:10px 12px;border-top:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.15)}
+.sb-user-info{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;color:#fff;flex-shrink:0}
+.sb-user-text{flex:1;min-width:0}
+.sb-username{font-size:.82rem;font-weight:600;color:#e0e7ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-role{font-size:.68rem;color:#818cf8}
+.sb-user-actions{display:flex;gap:6px}
+.sb-action-btn{flex:1;padding:5px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#a5b4fc;border-radius:6px;cursor:pointer;font-size:.75rem;transition:all .15s}
+.sb-action-btn:hover{background:rgba(99,102,241,.3);color:#fff;border-color:rgba(99,102,241,.5)}
 .main{margin-left:var(--sw);padding:20px;min-height:100vh}
 .page{display:none}.page.active{display:block}
 .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e2e8f0}
@@ -120,8 +129,24 @@
     <button class="nb" data-page="locust"><i class="fas fa-bug"></i>壓力測試 Locust</button>
     <button class="nb" data-page="sql_tool"><i class="fas fa-table"></i>SQL 工具</button>
     <button class="nb" data-page="reports"><i class="fas fa-chart-bar"></i>測試報告</button>
+    <!-- 管理員專屬：賬戶管理 -->
+    <div class="grp admin-only" style="display:none">系統管理</div>
+    <button class="nb admin-only" data-page="accounts" style="display:none"><i class="fas fa-users-cog"></i>賬戶管理</button>
   </div>
-  <div class="sb-foot">deepdiff · asyncio · httpx · redis · APScheduler</div>
+  <!-- 底部用戶信息 -->
+  <div class="sb-user" id="sbUser">
+    <div class="sb-user-info">
+      <div class="sb-avatar" id="sbAvatar">?</div>
+      <div class="sb-user-text">
+        <div class="sb-username" id="sbUsername">加載中...</div>
+        <div class="sb-role" id="sbRole"></div>
+      </div>
+    </div>
+    <div class="sb-user-actions">
+      <button class="sb-action-btn" onclick="openChangePwd()" title="修改密碼"><i class="fas fa-key fa-xs"></i></button>
+      <button class="sb-action-btn" onclick="doLogout()" title="退出登錄"><i class="fas fa-sign-out-alt fa-xs"></i></button>
+    </div>
+  </div>
 </nav>
 
 <div class="main">
@@ -200,6 +225,24 @@
   <div class="tw"><table class="table"><thead><tr><th>變量名</th><th>類型</th><th>值</th><th>描述</th><th>更新</th><th>操作</th></tr></thead>
   <tbody id="varTb"></tbody></table>
   <div class="pgw"><div class="text-muted small" id="varTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="varPg"></ul></nav></div></div>
+</div>
+
+<!-- ═══ ACCOUNTS ═══ -->
+<div id="page-accounts" class="page">
+  <div class="ph">
+    <h1 class="pt"><i class="fas fa-users-cog me-2 text-primary"></i>賬戶管理</h1>
+    <button class="btn btn-primary btn-sm" onclick="openAccModal()"><i class="fas fa-plus me-1"></i>新建賬戶</button>
+  </div>
+  <div class="alert alert-info py-2 mb-3 small">
+    <i class="fas fa-info-circle me-1"></i>
+    管理員可創建賬戶、修改密碼、切換角色。<strong>普通用戶</strong>擁有除賬戶管理外的所有功能權限。
+  </div>
+  <div class="tw">
+    <table class="table">
+      <thead><tr><th>用戶名</th><th>顯示名</th><th>角色</th><th>狀態</th><th>創建時間</th><th style="width:160px">操作</th></tr></thead>
+      <tbody id="accTb"><tr><td colspan="6" class="text-center text-muted py-4">加載中...</td></tr></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ═══ DATABASES ═══ -->
@@ -794,6 +837,7 @@ function go(name) {
   if (pg) pg.classList.add('active');
   document.querySelectorAll('.nb[data-page="' + name + '"]').forEach(b => b.classList.add('active'));
   const map = {
+    accounts: loadAccs,
     dashboard: loadDash,
     apis: () => { loadCats(); loadApis(); },
     categories: loadCats,
@@ -1987,6 +2031,7 @@ async function showRpt(id) {
 
 // ══════════ INIT ══════════
 document.addEventListener('DOMContentLoaded', () => {
+  initAuth();   // 先驗證登錄狀態，未登錄跳轉到 /login
   // Pre-load global data
   R('GET','/api/db/configs/').then(r=>{ if(r.code===0) S.dbs=r.data||[]; });
   R('GET','/api/redis/configs/').then(r=>{ if(r.code===0) S.redis=r.data||[]; });
@@ -2006,6 +2051,183 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+</script>
+
+<!-- ═══ Account Modal ═══ -->
+<div class="modal fade" id="accModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="accMT">新建賬戶</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="accId">
+    <div class="mb-2"><label class="form-label">用戶名 *</label>
+      <input type="text" class="form-control" id="accUsername" placeholder="login name (字母+數字)"></div>
+    <div class="mb-2"><label class="form-label">顯示名稱</label>
+      <input type="text" class="form-control" id="accDisplay" placeholder="展示給其他人的名字"></div>
+    <div class="mb-2"><label class="form-label">角色 *</label>
+      <select class="form-select" id="accRole">
+        <option value="normal">普通用戶 — 除賬戶管理外所有功能</option>
+        <option value="admin">管理員 — 全部功能</option>
+      </select></div>
+    <div class="mb-2" id="accPwdWrap"><label class="form-label">密碼 * <small class="text-muted">（最少6位）</small></label>
+      <input type="password" class="form-control" id="accPwd" placeholder="設置初始密碼"></div>
+    <div class="mb-2" id="accNewPwdWrap" style="display:none"><label class="form-label">新密碼 <small class="text-muted">（留空不修改）</small></label>
+      <input type="password" class="form-control" id="accNewPwd" placeholder="留空則不修改密碼"></div>
+    <div class="form-check form-switch mb-1" id="accActiveWrap">
+      <input class="form-check-input" type="checkbox" id="accActive" checked>
+      <label class="form-check-label">賬戶啟用</label>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+    <button class="btn btn-primary btn-sm" onclick="saveAcc()">保存</button>
+  </div>
+</div></div></div>
+
+<!-- ═══ Change Password Modal ═══ -->
+<div class="modal fade" id="chPwdModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">修改密碼</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-2"><label class="form-label">原密碼</label>
+      <input type="password" class="form-control" id="chOldPwd"></div>
+    <div class="mb-2"><label class="form-label">新密碼 <small class="text-muted">（最少6位）</small></label>
+      <input type="password" class="form-control" id="chNewPwd"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+    <button class="btn btn-primary btn-sm" onclick="doChangePwd()">確認修改</button>
+  </div>
+</div></div></div>
+
+<script>
+// ══════════ AUTH ══════════
+let CU = null; // current user
+
+async function initAuth() {
+  const r = await R('GET', '/api/auth/me/');
+  if (r.code === 401 || !r.data) {
+    window.location.href = '/login';
+    return;
+  }
+  CU = r.data;
+  // 更新 sidebar 用戶信息
+  const dn = CU.display_name || CU.username;
+  const el = id => document.getElementById(id);
+  el('sbUsername').textContent = dn;
+  el('sbAvatar').textContent   = dn.charAt(0).toUpperCase();
+  el('sbRole').textContent     = CU.role === 'admin' ? '管理員' : '普通用戶';
+  // 管理員顯示賬戶管理入口
+  if (CU.role === 'admin') {
+    document.querySelectorAll('.admin-only').forEach(e => e.style.display = '');
+  }
+}
+
+async function doLogout() {
+  await R('POST', '/api/auth/logout/');
+  window.location.href = '/login';
+}
+
+function openChangePwd() {
+  ['chOldPwd','chNewPwd'].forEach(id => document.getElementById(id).value = '');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('chPwdModal')).show();
+}
+
+async function doChangePwd() {
+  const old_password = document.getElementById('chOldPwd').value;
+  const new_password = document.getElementById('chNewPwd').value;
+  const r = await R('POST', '/api/auth/change-password/', { old_password, new_password });
+  if (r.code === 0) {
+    toast('密碼已修改');
+    bootstrap.Modal.getInstance(document.getElementById('chPwdModal'))?.hide();
+  } else {
+    toast(r.message, 'danger');
+  }
+}
+
+// ══════════ ACCOUNT MANAGEMENT ══════════
+async function loadAccs() {
+  const r = await R('GET', '/api/accounts/');
+  if (r.code !== 0) { toast(r.message, 'danger'); return; }
+  const items = r.data.items || [];
+  const roleBadge = role => role === 'admin'
+    ? '<span class="badge bg-danger">管理員</span>'
+    : '<span class="badge bg-secondary">普通用戶</span>';
+  document.getElementById('accTb').innerHTML = items.length ? items.map(u =>
+    '<tr>' +
+    '<td><code>' + eh(u.username) + '</code>' + (u.username==='admin'?'  <span class="badge bg-warning text-dark" style="font-size:.65rem">系統</span>':'') + '</td>' +
+    '<td>' + eh(u.display_name || '-') + '</td>' +
+    '<td>' + roleBadge(u.role) + '</td>' +
+    '<td>' + (u.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>') + '</td>' +
+    '<td class="text-muted small">' + u.created_at + '</td>' +
+    '<td>' +
+      '<button class="btn bi btn-outline-primary btn-sm me-1" onclick="editAcc(' + u.id + ')" title="編輯"><i class="fas fa-edit fa-xs"></i></button>' +
+      (u.username !== 'admin'
+        ? '<button class="btn bi btn-outline-danger btn-sm" onclick="delAcc(' + u.id + ',\'' + eh(u.username) + '\')" title="刪除"><i class="fas fa-trash fa-xs"></i></button>'
+        : '') +
+    '</td>' +
+    '</tr>'
+  ).join('') : '<tr><td colspan="6" class="text-center text-muted py-4">暫無賬戶</td></tr>';
+}
+
+function openAccModal() {
+  ['accId','accUsername','accDisplay','accPwd','accNewPwd'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('accRole').value = 'normal';
+  document.getElementById('accActive').checked = true;
+  document.getElementById('accPwdWrap').style.display   = '';
+  document.getElementById('accNewPwdWrap').style.display = 'none';
+  document.getElementById('accUsername').readOnly = false;
+  document.getElementById('accMT').textContent = '新建賬戶';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('accModal')).show();
+}
+
+async function editAcc(id) {
+  const r = await R('GET', '/api/accounts/' + id + '/');
+  if (r.code !== 0) { toast(r.message, 'danger'); return; }
+  const u = r.data;
+  document.getElementById('accId').value      = u.id;
+  document.getElementById('accUsername').value = u.username;
+  document.getElementById('accDisplay').value  = u.display_name || '';
+  document.getElementById('accRole').value     = u.role;
+  document.getElementById('accActive').checked = u.is_active;
+  document.getElementById('accPwdWrap').style.display    = 'none';
+  document.getElementById('accNewPwdWrap').style.display = '';
+  document.getElementById('accUsername').readOnly = true;
+  document.getElementById('accMT').textContent = '編輯賬戶：' + u.username;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('accModal')).show();
+}
+
+async function saveAcc() {
+  const id = document.getElementById('accId').value;
+  const isEdit = !!id;
+  const body = {
+    username:     document.getElementById('accUsername').value.trim(),
+    display_name: document.getElementById('accDisplay').value.trim(),
+    role:         document.getElementById('accRole').value,
+    is_active:    document.getElementById('accActive').checked,
+  };
+  if (isEdit) {
+    const np = document.getElementById('accNewPwd').value;
+    if (np) body.password = np;
+  } else {
+    body.password = document.getElementById('accPwd').value;
+    if (!body.username) { toast('請填寫用戶名', 'warning'); return; }
+    if (!body.password) { toast('請填寫密碼', 'warning'); return; }
+  }
+  const r = isEdit
+    ? await R('PUT',  '/api/accounts/' + id + '/', body)
+    : await R('POST', '/api/accounts/', body);
+  if (r.code === 0) {
+    toast(r.message);
+    bootstrap.Modal.getInstance(document.getElementById('accModal'))?.hide();
+    loadAccs();
+  } else {
+    toast(r.message, 'danger');
+  }
+}
+
+async function delAcc(id, uname) {
+  if (!confirm('確認刪除賬戶「' + uname + '」？此操作不可撤銷。')) return;
+  const r = await R('DELETE', '/api/accounts/' + id + '/');
+  r.code === 0 ? (toast('賬戶已刪除'), loadAccs()) : toast(r.message, 'danger');
+}
 </script>
 </body>
 </html>

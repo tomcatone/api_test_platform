@@ -6,6 +6,39 @@ import json
 from django.db import models
 
 
+class UserProfile(models.Model):
+    """用戶擴展信息（角色管理）"""
+    ROLE_CHOICES = [
+        ('admin',  '管理員'),
+        ('normal', '普通用戶'),
+    ]
+    user         = models.OneToOneField('auth.User', on_delete=models.CASCADE, related_name='profile')
+    role         = models.CharField(max_length=20, choices=ROLE_CHOICES, default='normal')
+    display_name = models.CharField(max_length=100, blank=True, default='')
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '用戶資料'
+        verbose_name_plural = '用戶資料'
+
+    def __str__(self):
+        return f'{self.user.username} ({self.get_role_display()})'
+
+    def is_admin(self):
+        return self.role == 'admin'
+
+    def to_dict(self):
+        return {
+            'id':           self.user.id,
+            'username':     self.user.username,
+            'display_name': self.display_name or self.user.username,
+            'role':         self.role,
+            'role_label':   self.get_role_display(),
+            'is_active':    self.user.is_active,
+            'created_at':   self.user.date_joined.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+
+
 class Category(models.Model):
     """接口分類"""
     name = models.CharField(max_length=100, unique=True, verbose_name='分類名稱')

@@ -5,19 +5,52 @@ API 測試平台視圖層 v2
 import json
 import time
 import logging
+import functools
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.models import User
+from django.shortcuts import redirect
 
-from .models import Category, GlobalVariable, ApiConfig, TestReport, TestResult, DatabaseConfig
+from .models import Category, GlobalVariable, ApiConfig, TestReport, TestResult, DatabaseConfig, UserProfile
 from .executor import execute_api, execute_batch, reset_runtime_vars
 
 logger = logging.getLogger(__name__)
 
 
-# ─── 工具函數 ───────────────────────────────────
+# ─── 認證工具 ────────────────────────────────────
+
+def require_login(view_func):
+    """裝飾器：未登錄返回 401"""
+    @functools.wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'code': 401, 'message': '請先登錄', 'data': None, 'timestamp': None}, status=401)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+def require_admin(view_func):
+    """裝飾器：非管理員返回 403"""
+    @functools.wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'code': 401, 'message': '請先登錄', 'data': None, 'timestamp': None}, status=401)
+        profile = getattr(request.user, 'profile', None)
+        if not profile or profile.role != 'admin':
+            return JsonResponse({'code': 403, 'message': '需要管理員權限', 'data': None, 'timestamp': None}, status=403)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+def get_profile(user):
+    """安全獲取用戶 profile"""
+    try:
+        return user.profile
+    except Exception:
+        return None
+
 
 def success(data=None, message='操作成功', **kw):
     resp = {'code': 0, 'message': message, 'data': data}
@@ -1024,3 +1057,143 @@ def locust_preview(request):
     body = parse_body(request)
     script = get_script_preview(body.get('api_ids', []))
     return success({'script': script})
+
+# ═══════════════════════════════════════════════
+#  認證 — 登錄 / 登出 / 當前用戶
+# ═══════════════════════════════════════════════
+
+@csrf_exempt
+def auth_login_view(request):
+    if request.method == 'POST':
+        body = parse_body(request)
+        username = body.get('username', '').strip()
+        password = body.get('password', '')
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            return error('用戶名或密碼錯誤')
+        if not user.is_active:
+            return error('賬戶已被停用，請聯繫管理員')
+        auth_login(request, user)
+        profile = get_profile(user)
+        return success({
+            'username':     user.username,
+            'display_name': profile.display_name if profile else user.username,
+            'role':         profile.role if profile else 'normal',
+        }, '登錄成功')
+    return error('方法不允許')
+
+
+@csrf_exempt
+def auth_logout_view(request):
+    auth_logout(request)
+    return success(message='已登出')
+
+
+@csrf_exempt
+def auth_me(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'code': 401, 'message': '未登錄', 'data': None, 'timestamp': None})
+    profile = get_profile(request.user)
+    return success({
+        'username':     request.user.username,
+        'display_name': profile.display_name if profile else request.user.username,
+        'role':         profile.role if profile else 'normal',
+    })
+
+
+@csrf_exempt
+def auth_change_password(request):
+    """修改自己的密碼"""
+    if not request.user.is_authenticated:
+        return JsonResponse({'code': 401, 'message': '未登錄', 'data': None, 'timestamp': None})
+    if request.method != 'POST':
+        return error('方法不允許')
+    body = parse_body(request)
+    old_pwd = body.get('old_password', '')
+    new_pwd = body.get('new_password', '').strip()
+    if not new_pwd or len(new_pwd) < 6:
+        return error('新密碼長度不能少於 6 位')
+    user = authenticate(request, username=request.user.username, password=old_pwd)
+    if user is None:
+        return error('原密碼不正確')
+    user.set_password(new_pwd)
+    user.save()
+    auth_login(request, user)   # 重新登錄維持 session
+    return success(message='密碼已修改')
+
+
+# ═══════════════════════════════════════════════
+#  賬戶管理（僅管理員）
+# ═══════════════════════════════════════════════
+
+@csrf_exempt
+@require_admin
+def account_list(request):
+    if request.method == 'GET':
+        profiles = UserProfile.objects.select_related('user').all().order_by('user__date_joined')
+        return success({
+            'items': [p.to_dict() for p in profiles],
+            'total': profiles.count(),
+        })
+    elif request.method == 'POST':
+        body = parse_body(request)
+        username = body.get('username', '').strip()
+        password = body.get('password', '').strip()
+        role     = body.get('role', 'normal')
+        display_name = body.get('display_name', '').strip()
+
+        if not username:
+            return error('用戶名不能為空')
+        if not password or len(password) < 6:
+            return error('密碼長度不能少於 6 位')
+        if User.objects.filter(username=username).exists():
+            return error(f'用戶名 {username} 已存在')
+        if role not in ('admin', 'normal'):
+            role = 'normal'
+
+        user = User.objects.create_user(username=username, password=password)
+        profile = UserProfile.objects.create(user=user, role=role, display_name=display_name or username)
+        return success(profile.to_dict(), '創建成功')
+
+
+@csrf_exempt
+@require_admin
+def account_detail(request, pk):
+    try:
+        user = User.objects.get(pk=pk)
+        profile = user.profile
+    except (User.DoesNotExist, UserProfile.DoesNotExist):
+        return error('用戶不存在')
+
+    if request.method == 'GET':
+        return success(profile.to_dict())
+
+    elif request.method == 'PUT':
+        body = parse_body(request)
+        # 不允許修改 admin 自己的角色
+        if user.username == 'admin' and body.get('role') == 'normal':
+            return error('不能修改 admin 賬戶的角色')
+
+        new_pwd = body.get('password', '').strip()
+        if new_pwd:
+            if len(new_pwd) < 6:
+                return error('密碼長度不能少於 6 位')
+            user.set_password(new_pwd)
+            user.save()
+
+        profile.role         = body.get('role', profile.role)
+        profile.display_name = body.get('display_name', profile.display_name).strip()
+        profile.save()
+
+        is_active = body.get('is_active')
+        if is_active is not None and user.username != 'admin':
+            user.is_active = bool(is_active)
+            user.save()
+
+        return success(profile.to_dict(), '更新成功')
+
+    elif request.method == 'DELETE':
+        if user.username == 'admin':
+            return error('不能刪除 admin 賬戶')
+        user.delete()
+        return success(message='刪除成功')
