@@ -189,8 +189,33 @@ class ApiConfig(models.Model):
         except: return {}
 
     def get_params(self):
-        try: return json.loads(self.params)
-        except: return {}
+        """
+        支持三種格式：
+          1. JSON 對象：{"key":"val","page":"1"}  → dict
+          2. key=value：key=val&page=1            → dict
+          3. 純字符串：ef47c91e-xxx               → {'_raw': 'ef47c91e-xxx'}
+        """
+        raw = (self.params or '').strip()
+        if not raw or raw == '{}':
+            return {}
+        # 嘗試 JSON
+        try:
+            result = json.loads(raw)
+            if isinstance(result, dict):
+                return result
+        except Exception:
+            pass
+        # 嘗試 key=value&key2=val2
+        if '=' in raw:
+            try:
+                from urllib.parse import parse_qs, urlencode
+                parsed = parse_qs(raw, keep_blank_values=True)
+                # parse_qs 返回 {key: [val]}，攤平為 {key: val}
+                return {k: v[0] for k, v in parsed.items()}
+            except Exception:
+                pass
+        # 純字符串：原樣保留，executor 會追加到 URL
+        return {'_raw': raw}
 
     def get_body(self):
         """

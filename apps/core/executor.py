@@ -352,81 +352,99 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
     """
     構建 requests 請求 kwargs。
 
-    body_type 決定 body 以哪種方式發送（互斥，選其一）：
-      json   → requests.post(url, json=body)
-      data   → requests.post(url, data=body)        # dict 或字符串
-      params → requests.post(url, params={**orig_params, **body})  # 合併到 query string
-      form   → requests.post(url, data={k:str(v)})  # form-urlencoded（同 data 但強制 str 值）
-      text   → requests.post(url, data=str_body, headers={"Content-Type":"text/plain"})
-      raw    → requests.post(url, data=json.dumps(body))
-      files  → requests.post(url, files=..., data=...)
+    body_type 對所有 HTTP 方法（GET/POST/PUT/PATCH/DELETE）行為一致：
+      json   → json=body
+      data   → data=body（dict 或任意字符串）
+      params → body 合併到 query string（GET/POST 都適用）
+      form   → data={k:str(v)}（form-urlencoded）
+      text   → data=str，自動加 Content-Type: text/plain
+      raw    → data=json.dumps(body)，自動加 Content-Type: application/json
+      files  → files=..., data=...
+
+    只有 body 為空（{}、''、None）時才不發送 body。
     """
     kwargs = {
         'url': url,
         'headers': dict(headers or {}),
-        'params': {k: v for k, v in (params or {}).items() if v not in ('', None)},
+        'params': {k: v for k, v in (params or {}).items() if k != '_raw' and v not in ('', None)},
         'timeout': timeout,
     }
-    m = method.upper()
-    if m in ('POST', 'PUT', 'PATCH', 'DELETE', 'GET'):
-        if body_type == 'json':
-            if m != 'GET':
-                kwargs['json'] = body
-        elif body_type == 'data':
-            # 直接對應 requests 的 data= 參數
-            if isinstance(body, dict):
-                kwargs['data'] = body
-            elif isinstance(body, str):
-                kwargs['data'] = body
-            else:
-                kwargs['data'] = str(body) if body else ''
-        elif body_type == 'params':
-            # 將 body 內容合併到 query string（params=）
-            extra = {}
-            if isinstance(body, dict):
-                extra = {k: str(v) for k, v in body.items() if v not in ('', None)}
-            elif isinstance(body, str) and body.strip():
-                # 嘗試解析為 JSON
-                try:
-                    extra = {k: str(v) for k, v in json.loads(body).items()}
-                except Exception:
-                    pass
-            kwargs['params'] = {**kwargs['params'], **extra}
-        elif body_type == 'form':
-            if m != 'GET':
-                kwargs['data'] = {k: str(v) for k, v in (body or {}).items()}
-        elif body_type == 'text':
-            if m != 'GET':
-                text_val = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
-                kwargs['data'] = text_val
-                if 'Content-Type' not in kwargs['headers']:
-                    kwargs['headers']['Content-Type'] = 'text/plain; charset=utf-8'
-        elif body_type == 'raw':
-            if m != 'GET':
-                if isinstance(body, (dict, list)):
-                    raw_str = json.dumps(body, ensure_ascii=False)
-                    kwargs['data'] = raw_str
-                    if 'Content-Type' not in kwargs['headers']:
-                        kwargs['headers']['Content-Type'] = 'application/json'
-                else:
-                    kwargs['data'] = str(body) if body else ''
-        elif body_type == 'files':
-            if m != 'GET':
-                files_list = []
-                body_copy = dict(body) if isinstance(body, dict) else {}
-                raw_files = body_copy.pop('__files__', [])
-                for fi in raw_files:
-                    fpath = fi.get('path', '')
-                    if fpath and os.path.isfile(fpath):
-                        files_list.append((fi.get('field', 'file'),
-                                           (os.path.basename(fpath), open(fpath, 'rb'), fi.get('mime', 'application/octet-stream'))))
-                if files_list:
-                    kwargs['files'] = files_list
-                if body_copy:
-                    kwargs['data'] = {k: str(v) for k, v in body_copy.items()}
+
+    # 純字符串 params（如 UUID）：直接追加到 URL
+    if isinstance(params, dict) and '_raw' in params:
+        raw_val = str(params['_raw']).strip('/')
+        sep = '&' if '?' in kwargs['url'] else '?'
+        # 如果是純 key=value 字符串，追加到 query；否則追加到路徑後
+        if '=' in raw_val:
+            kwargs['url'] = kwargs['url'] + sep + raw_val
         else:
-            if m != 'GET':
-                kwargs['json'] = body
+            kwargs['url'] = kwargs['url'].rstrip('/') + '/' + raw_val
+
+
+    # body 為空則不設置任何 body 參數
+    body_is_empty = body in ({}, '', None, [])
+
+    if body_type == 'json':
+        if not body_is_empty:
+            kwargs['json'] = body
+
+    elif body_type == 'data':
+        kwargs['data'] = body if isinstance(body, (dict, str)) else str(body or '')
+
+    elif body_type == 'params':
+        # body 合併到 query string（適合 GET 傳參，或 POST 額外追加 URL 參數）
+        extra = {}
+        if isinstance(body, dict):
+            extra = {k: str(v) for k, v in body.items() if v not in ('', None)}
+        elif isinstance(body, str) and body.strip():
+            try:
+                extra = {k: str(v) for k, v in json.loads(body).items()}
+            except Exception:
+                pass
+        kwargs['params'] = {**kwargs['params'], **extra}
+
+    elif body_type == 'form':
+        if not body_is_empty:
+            kwargs['data'] = {k: str(v) for k, v in body.items()} if isinstance(body, dict) else {}
+
+    elif body_type == 'text':
+        text_val = body if isinstance(body, str) else (
+            json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
+        )
+        if text_val:
+            kwargs['data'] = text_val
+            if 'Content-Type' not in kwargs['headers']:
+                kwargs['headers']['Content-Type'] = 'text/plain; charset=utf-8'
+
+    elif body_type == 'raw':
+        if not body_is_empty:
+            if isinstance(body, (dict, list)):
+                kwargs['data'] = json.dumps(body, ensure_ascii=False)
+                if 'Content-Type' not in kwargs['headers']:
+                    kwargs['headers']['Content-Type'] = 'application/json'
+            else:
+                kwargs['data'] = str(body)
+
+    elif body_type == 'files':
+        files_list = []
+        body_copy = dict(body) if isinstance(body, dict) else {}
+        raw_files = body_copy.pop('__files__', [])
+        for fi in raw_files:
+            fpath = fi.get('path', '')
+            if fpath and os.path.isfile(fpath):
+                files_list.append((fi.get('field', 'file'),
+                                   (os.path.basename(fpath), open(fpath, 'rb'),
+                                    fi.get('mime', 'application/octet-stream'))))
+        if files_list:
+            kwargs['files'] = files_list
+        if body_copy:
+            kwargs['data'] = {k: str(v) for k, v in body_copy.items()}
+
+    else:
+        # 默認按 json 處理
+        if not body_is_empty:
+            kwargs['json'] = body
+
     return kwargs
 
 
@@ -449,29 +467,60 @@ async def _do_async_request(method, url, headers, params, body, body_type, timeo
     params  = {k: v for k, v in (params or {}).items() if v not in ('', None)}
 
     async with httpx.AsyncClient(timeout=timeout_cfg) as client:
-        kw = {'headers': headers, 'params': params}
-        m = method.upper()
-        if m in ('POST', 'PUT', 'PATCH', 'DELETE'):
-            if body_type == 'json':
+        # 過濾 _raw，並處理純字符串 params
+        clean_params = {k: v for k, v in params.items() if k != '_raw' and v not in ('', None)}
+        req_url = url
+        if '_raw' in params:
+            raw_val = str(params['_raw']).strip('/')
+            sep = '&' if '?' in req_url else '?'
+            req_url = (req_url + sep + raw_val) if '=' in raw_val else (req_url.rstrip('/') + '/' + raw_val)
+
+        kw = {'headers': headers, 'params': clean_params}
+        body_is_empty = body in ({}, '', None, [])
+
+        if body_type == 'json':
+            if not body_is_empty:
                 kw['json'] = body
-            elif body_type in ('data', 'form'):
-                kw['data'] = body if isinstance(body, dict) else ({k: str(v) for k, v in body.items()} if isinstance(body, dict) else str(body or ''))
-            elif body_type == 'params':
-                extra = {k: str(v) for k, v in body.items()} if isinstance(body, dict) else {}
-                kw['params'] = {**kw['params'], **extra}
-            elif body_type == 'text':
-                text_val = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
+
+        elif body_type == 'data':
+            kw['data'] = body if isinstance(body, (dict, str)) else str(body or '')
+
+        elif body_type == 'params':
+            extra = {}
+            if isinstance(body, dict):
+                extra = {k: str(v) for k, v in body.items() if v not in ('', None)}
+            elif isinstance(body, str) and body.strip():
+                try:
+                    extra = {k: str(v) for k, v in json.loads(body).items()}
+                except Exception:
+                    pass
+            kw['params'] = {**kw['params'], **extra}
+
+        elif body_type == 'form':
+            if not body_is_empty:
+                kw['data'] = {k: str(v) for k, v in body.items()} if isinstance(body, dict) else {}
+
+        elif body_type == 'text':
+            text_val = body if isinstance(body, str) else (
+                json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
+            )
+            if text_val:
                 kw['content'] = text_val.encode('utf-8')
                 if 'Content-Type' not in headers:
                     kw['headers']['Content-Type'] = 'text/plain; charset=utf-8'
-            elif body_type == 'raw':
-                raw = json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
-                kw['content'] = raw.encode('utf-8')
+
+        elif body_type == 'raw':
+            if not body_is_empty:
+                raw_str = json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body)
+                kw['content'] = raw_str.encode('utf-8')
                 if 'Content-Type' not in headers:
                     kw['headers']['Content-Type'] = 'application/json'
-            else:
+
+        else:
+            if not body_is_empty:
                 kw['json'] = body
-        resp = await client.request(m, url, **kw)
+
+        resp = await client.request(method.upper(), req_url, **kw)
         return resp.status_code, dict(resp.headers), resp.text
 
 
@@ -500,15 +549,57 @@ def _run_async_coro(coro):
 def execute_api(api_config, extra_vars: dict = None) -> dict:
     from apps.core.db_utils import execute_sql_statements, run_db_assertions
 
-    variables   = load_global_vars()
+    variables = load_global_vars()
     if extra_vars:
         variables.update(extra_vars)
 
-    url         = _replace_vars(api_config.url, variables)
-    headers     = replace_vars_in_dict(api_config.get_headers(), variables)
-    params      = replace_vars_in_dict(api_config.get_params(), variables)
-    body        = replace_vars_in_dict(api_config.get_body(), variables)
-    timeout     = max(int(getattr(api_config, 'timeout', 30) or 30), 1)
+    # ── Step 1: 前置 Redis 取值（必須最先執行，讓注入的變量能在 body/params/url 中使用）──
+    pre_redis_log = []
+    pre_redis_rules = api_config.get_pre_redis_rules() if hasattr(api_config, 'get_pre_redis_rules') else []
+    if pre_redis_rules:
+        from apps.core.redis_utils import get_client
+        from apps.core.models import RedisConfig
+        for rule in pre_redis_rules:
+            redis_id      = rule.get('redis_id')
+            key_tpl       = rule.get('key', '').strip()
+            var_name      = rule.get('var_name', '').strip()
+            extract_field = rule.get('extract_field', '').strip()
+            if not (redis_id and key_tpl and var_name):
+                continue
+            real_key = _replace_vars(key_tpl, variables)
+            entry = {'key': real_key, 'var_name': var_name, 'success': False}
+            try:
+                cfg = RedisConfig.objects.get(pk=redis_id)
+                client, err = get_client(cfg)
+                if err:
+                    entry['error'] = err
+                else:
+                    raw = client.get(real_key)
+                    client.close()
+                    if raw is None:
+                        entry['error'] = f'key [{real_key}] 不存在或已過期'
+                    else:
+                        val = raw
+                        if extract_field:
+                            try:
+                                data_obj = json.loads(raw) if isinstance(raw, str) else raw
+                                if isinstance(data_obj, dict) and extract_field in data_obj:
+                                    val = str(data_obj[extract_field])
+                            except Exception:
+                                pass
+                        variables[var_name] = str(val)
+                        set_runtime_var(var_name, str(val))
+                        entry.update({'success': True, 'value': str(val)})
+            except Exception as e:
+                entry['error'] = str(e)
+            pre_redis_log.append(entry)
+
+    # ── Step 2: 變量替換（此時 variables 已包含 Redis 注入的值）──
+    url       = _replace_vars(api_config.url, variables)
+    headers   = replace_vars_in_dict(api_config.get_headers(), variables)
+    params    = replace_vars_in_dict(api_config.get_params(), variables)
+    body      = replace_vars_in_dict(api_config.get_body(), variables)
+    timeout   = max(int(getattr(api_config, 'timeout', 30) or 30), 1)
     use_async   = bool(getattr(api_config, 'use_async', False))
     use_session = bool(getattr(api_config, 'use_session', False))
     body_type   = getattr(api_config, 'body_type', 'json') or 'json'
@@ -538,46 +629,6 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
             # json / form 模式：才包裝成 JSON 對象
             body      = {'encrypted': encrypted_body}
             body_type = 'json'
-
-    # ── 前置 Redis 取值（請求前從 Redis 讀取，注入為運行時變量）──
-    pre_redis_log = []
-    pre_redis_rules = api_config.get_pre_redis_rules() if hasattr(api_config, 'get_pre_redis_rules') else []
-    if pre_redis_rules:
-        from apps.core.redis_utils import get_client
-        from apps.core.models import RedisConfig
-        for rule in pre_redis_rules:
-            redis_id     = rule.get('redis_id')
-            key_tpl      = rule.get('key', '').strip()
-            var_name     = rule.get('var_name', '').strip()
-            extract_field= rule.get('extract_field', '').strip()
-            if not (redis_id and key_tpl and var_name):
-                continue
-            real_key = _replace_vars(key_tpl, variables)
-            entry = {'key': real_key, 'var_name': var_name, 'success': False}
-            try:
-                cfg = RedisConfig.objects.get(pk=redis_id)
-                client, err = get_client(cfg)
-                if err:
-                    entry['error'] = err
-                else:
-                    raw = client.get(real_key)
-                    client.close()
-                    if raw is None:
-                        entry['error'] = f'key [{real_key}] 不存在'
-                    else:
-                        val = raw
-                        if extract_field:
-                            try:
-                                data_obj = json.loads(raw) if isinstance(raw, str) else raw
-                                val = str(data_obj[extract_field]) if isinstance(data_obj, dict) and extract_field in data_obj else raw
-                            except Exception:
-                                pass
-                        variables[var_name] = str(val)
-                        set_runtime_var(var_name, str(val))
-                        entry.update({'success': True, 'value': str(val)})
-            except Exception as e:
-                entry['error'] = str(e)
-            pre_redis_log.append(entry)
 
     # 前置 SQL
     pre_sql_result = ''

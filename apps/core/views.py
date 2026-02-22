@@ -368,7 +368,7 @@ def _create_or_update_api(api, body):
         'content_type': body.get('content_type', 'json'),
         'category_id': body.get('category_id') or None,
         'headers':      _vj(body.get('headers'), '{}'),
-        'params':       _vj(body.get('params'), '{}'),
+        'params':       _vjany(body.get('params'), '{}'),   # 兼容 JSON / key=val / 純字符串
         'body':         _vjany(body.get('body'), '{}'),    # text/data模式允許非JSON字符串
         'extract_vars': _vj(body.get('extract_vars'), '[]'),
         'assertions':   _vj(body.get('assertions'), '[]'),

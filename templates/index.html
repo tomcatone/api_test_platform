@@ -422,8 +422,15 @@
         <div class="fst">請求頭 (JSON)</div>
         <textarea class="form-control ca" id="apiHdr" rows="5" placeholder='{"Authorization":"Bearer {{token}}","Content-Type":"application/json"}'></textarea></div>
       <div class="tab-pane fade" id="tP">
-        <div class="fst">Query Params (JSON)</div>
-        <textarea class="form-control ca" id="apiPrm" rows="5" placeholder='{"page":"1","size":"10"}'></textarea></div>
+        <div class="fst">Query Params <small class="text-muted fw-normal">— 支持 JSON / key=value / 純字符串</small></div>
+        <div class="alert alert-info py-1 small mb-2">
+          JSON：<code>{"page":"1","size":"10"}</code> &nbsp;|&nbsp;
+          key=val：<code>page=1&size=10</code> &nbsp;|&nbsp;
+          純字符串：<code>ef47c91e-06e7-4311-a0d2-974cbcacbb4f</code>（追加到 URL 路徑）
+        </div>
+        <textarea class="form-control ca" id="apiPrm" rows="4" placeholder='{"page":"1","size":"10"}
+或: page=1&size=10
+或: ef47c91e-06e7-4311-a0d2-974cbcacbb4f'></textarea></div>
       <div class="tab-pane fade" id="tB">
         <div class="fst">請求體</div>
         <div id="bodyTypeHint" class="alert alert-info py-1 small mb-2">JSON 模式：填寫 JSON 對象，自動序列化發送</div>
@@ -1193,7 +1200,7 @@ function colApiData() {
     category_id:$('apiCat').value||null, sort_order:+$('apiSort').value||0,
     timeout:+$('apiTimeout').value||30, description:$('apiDesc').value,
     headers: tryJSON($('apiHdr').value, 'Headers'),
-    params:  tryJSON($('apiPrm').value, 'Params'),
+    params:  ($('apiPrm').value||'').trim() || '{}',
     body:    $('apiBdy').value || '{}',
     use_async:$('apiAsync').checked, use_session:$('apiSession').checked,
     encrypted:$('apiEnc').checked,
