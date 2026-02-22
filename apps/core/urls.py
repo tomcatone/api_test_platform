@@ -7,11 +7,11 @@ urlpatterns = [
     path('categories/<int:pk>/', views.category_detail, name='category-detail'),
     # 全局變量
     path('variables/',                 views.variable_list,   name='variable-list'),
-    path('variables/<int:pk>/',        views.variable_detail, name='variable-detail'),
-    path('dynamic-vars/',              views.dynamic_var_list,   name='dynamic-var-list'),
-    path('dynamic-vars/<int:pk>/',     views.dynamic_var_detail, name='dynamic-var-detail'),
-    path('dynamic-vars/<int:pk>/toggle/', views.dynamic_var_toggle, name='dynamic-var-toggle'),
     path('variables/token/generate/',  views.generate_token,  name='token-generate'),
+    path('variables/<int:pk>/',        views.variable_detail, name='variable-detail'),
+    path('dynamic-vars/',              views.dynamic_var_list,    name='dynamic-var-list'),
+    path('dynamic-vars/<int:pk>/toggle/', views.dynamic_var_toggle, name='dynamic-var-toggle'),
+    path('dynamic-vars/<int:pk>/',     views.dynamic_var_detail,  name='dynamic-var-detail'),
     # MySQL
     path('db/configs/',                views.db_config_list,   name='db-config-list'),
     path('db/configs/<int:pk>/',       views.db_config_detail, name='db-config-detail'),
@@ -47,6 +47,9 @@ urlpatterns = [
     # 報告
     path('reports/',           views.report_list,    name='report-list'),
     path('reports/<int:pk>/',  views.report_detail,  name='report-detail'),
+    # SSL 證書
+    path('ssl/cert/upload/', views.ssl_cert_upload, name='ssl-cert-upload'),
+    path('ssl/certs/',       views.ssl_cert_list,   name='ssl-cert-list'),
     # 認證
     path('auth/login/',           views.auth_login_view,    name='auth-login'),
     path('auth/logout/',          views.auth_logout_view,   name='auth-logout'),

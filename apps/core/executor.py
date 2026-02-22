@@ -456,9 +456,10 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
 # ── 同步請求（requests / Session）───────────────────
 
 def _do_sync_request(method, url, headers, params, body, body_type, timeout,
-                     use_session=False, api_id=None):
+                     use_session=False, api_id=None, ssl_verify=True):
     kw = _build_request_kwargs(method, url, headers, params, body, body_type, timeout)
     req_url = kw.pop('url')
+    kw['verify'] = ssl_verify   # True / False / '/path/to/cert.pem'
     sess = _get_session(api_id) if (use_session and api_id) else requests
     resp = sess.request(method.upper(), req_url, **kw)
     return resp.status_code, dict(resp.headers), resp.text
@@ -466,12 +467,24 @@ def _do_sync_request(method, url, headers, params, body, body_type, timeout,
 
 # ── 異步請求（asyncio + httpx）──────────────────────
 
-async def _do_async_request(method, url, headers, params, body, body_type, timeout):
+async def _do_async_request(method, url, headers, params, body, body_type, timeout,
+                             ssl_verify=True):
     timeout_cfg = httpx.Timeout(connect=min(timeout, 10), read=timeout, write=timeout, pool=timeout)
     headers = dict(headers or {})
     params  = {k: v for k, v in (params or {}).items() if v not in ('', None)}
 
-    async with httpx.AsyncClient(timeout=timeout_cfg) as client:
+    # httpx ssl_verify: True/False or path string → use ssl_context for custom cert
+    if isinstance(ssl_verify, str) and ssl_verify not in ('true', 'false', '', 'True', 'False'):
+        import ssl as _ssl
+        _ctx = _ssl.create_default_context()
+        _ctx.load_verify_locations(ssl_verify)
+        _httpx_verify = _ctx
+    elif ssl_verify is False or str(ssl_verify).lower() == 'false':
+        _httpx_verify = False
+    else:
+        _httpx_verify = True
+
+    async with httpx.AsyncClient(timeout=timeout_cfg, verify=_httpx_verify) as client:
         # 過濾 _raw，並處理純字符串 params
         clean_params = {k: v for k, v in params.items() if k != '_raw' and v not in ('', None)}
         req_url = url
@@ -651,6 +664,19 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
     use_session = bool(getattr(api_config, 'use_session', False))
     body_type   = getattr(api_config, 'body_type', 'json') or 'json'
 
+    # ── SSL 驗證模式 ──
+    _ssl_mode = getattr(api_config, 'ssl_verify', 'true') or 'true'
+    _ssl_cert = (getattr(api_config, 'ssl_cert', '') or '').strip()
+    if _ssl_mode == 'false':
+        ssl_verify = False          # 跳過驗證（忽略自簽名）
+    elif _ssl_mode == 'custom' and _ssl_cert:
+        import os as _os
+        if not _os.path.isfile(_ssl_cert):
+            raise FileNotFoundError(f'SSL 自定義 CA 證書文件不存在：{_ssl_cert}')
+        ssl_verify = _ssl_cert      # 使用自定義 CA 證書路徑
+    else:
+        ssl_verify = True           # 默認驗證
+
     # ── Body 字段級加密（AES-GCM per-field）──
     body_enc_rules = api_config.get_body_enc_rules() if hasattr(api_config, 'get_body_enc_rules') else []
     enc_key        = getattr(api_config, 'encryption_key', '') or ''
@@ -694,12 +720,13 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
     try:
         if use_async:
             response_status, response_headers, response_body = _run_async_coro(
-                _do_async_request(api_config.method, url, headers, params, body, body_type, timeout)
+                _do_async_request(api_config.method, url, headers, params, body, body_type, timeout,
+                                  ssl_verify=ssl_verify)
             )
         else:
             response_status, response_headers, response_body = _do_sync_request(
                 api_config.method, url, headers, params, body, body_type, timeout,
-                use_session=use_session, api_id=api_config.id
+                use_session=use_session, api_id=api_config.id, ssl_verify=ssl_verify
             )
         try:
             response_data = json.loads(response_body)
@@ -801,7 +828,7 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
 
 # ── 批量執行 ─────────────────────────────────────────
 
-def execute_batch(api_ids: list, report_name: str = None):
+def execute_batch(api_ids: list, report_name: str = None, stop_on_failure: bool = False):
     from apps.core.models import ApiConfig, TestReport, TestResult
     reset_runtime_vars()
     apis = ApiConfig.objects.filter(id__in=api_ids).order_by('sort_order', 'id')
@@ -834,7 +861,12 @@ def execute_batch(api_ids: list, report_name: str = None):
         if rd['status'] == 'pass': passed += 1
         elif rd['status'] == 'fail': failed += 1
         else: error += 1
+        # 失敗停止：fail 或 error 狀態時中斷
+        if stop_on_failure and rd['status'] in ('fail', 'error'):
+            logger.info(f'[Batch] 接口 {rd["api_name"]} {rd["status"]}，已啟用失敗停止，中斷執行')
+            break
     report.passed = passed; report.failed = failed; report.error = error
+    report.total  = passed + failed + error   # 實際執行數（stop_on_failure 中斷時小於原始 total）
     report.duration = round(time.time() - t0, 3); report.status = 'completed'
     report.save()
     return report

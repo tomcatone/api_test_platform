@@ -192,6 +192,15 @@ class ApiConfig(models.Model):
     use_async    = models.BooleanField(default=False, verbose_name='使用異步請求(httpx)')
     timeout      = models.IntegerField(default=30, verbose_name='超時秒數')
 
+    # ── SSL 驗證 ──
+    SSL_VERIFY_CHOICES = [
+        ('true',   '驗證 SSL 證書（默認）'),
+        ('false',  '跳過 SSL 驗證（忽略自簽名/內網證書）'),
+        ('custom', '使用自定義 CA 證書'),
+    ]
+    ssl_verify  = models.CharField(max_length=10, choices=SSL_VERIFY_CHOICES, default='true', verbose_name='SSL 驗證模式')
+    ssl_cert    = models.CharField(max_length=500, blank=True, default='', verbose_name='自定義 CA 證書路徑')
+
     # ── 變量提取規則 ──
     extract_vars = models.TextField(default='[]', verbose_name='提取變量規則 (JSON)')
 

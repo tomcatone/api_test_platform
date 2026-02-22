@@ -421,6 +421,8 @@ def _api_to_dict(api, brief=True):
             'encryption_key': api.encryption_key,
             'encryption_algorithm': api.encryption_algorithm,
             'timeout': api.timeout,
+            'ssl_verify': getattr(api, 'ssl_verify', 'true') or 'true',
+            'ssl_cert':   getattr(api, 'ssl_cert', '') or '',
             'pre_sql_db_id': api.pre_sql_db_id,
             'pre_sql': api.pre_sql,
             'post_sql_db_id': api.post_sql_db_id,
@@ -476,6 +478,8 @@ def _create_or_update_api(api, body):
         'body_type': body.get('body_type', 'json'),
         'deepdiff_assertions': _vj(body.get('deepdiff_assertions'), '[]'),
         'timeout': int(body.get('timeout', 30)),
+        'ssl_verify': body.get('ssl_verify', 'true') or 'true',
+        'ssl_cert':   body.get('ssl_cert', '') or '',
         'pre_sql_db_id': body.get('pre_sql_db_id') or None,
         'pre_sql': body.get('pre_sql', ''),
         'post_sql_db_id': body.get('post_sql_db_id') or None,
@@ -567,12 +571,13 @@ def api_run_single(request, pk):
 def api_run_batch(request):
     if request.method != 'POST':
         return error('方法不允許')
-    body     = parse_body(request)
-    api_ids  = body.get('api_ids', [])
-    rep_name = body.get('report_name', '').strip()
+    body            = parse_body(request)
+    api_ids         = body.get('api_ids', [])
+    rep_name        = body.get('report_name', '').strip()
+    stop_on_failure = bool(body.get('stop_on_failure', False))
     if not api_ids:
         return error('請選擇要執行的接口')
-    report = execute_batch(api_ids, rep_name)
+    report = execute_batch(api_ids, rep_name, stop_on_failure=stop_on_failure)
     if not report:
         return error('未找到有效接口')
     return success({
@@ -584,10 +589,62 @@ def api_run_batch(request):
 
 
 # ═══════════════════════════════════════════════
-#  測試報告
+#  SSL 證書上傳
 # ═══════════════════════════════════════════════
 
 @csrf_exempt
+def ssl_cert_upload(request):
+    """
+    上傳自定義 CA 證書文件（.pem / .crt / .cer）
+    POST /api/ssl/cert/upload/
+    返回：{ path: '/path/to/cert.pem', filename: 'xxx.pem' }
+    """
+    if request.method != 'POST':
+        return error('方法不允許')
+    f = request.FILES.get('cert')
+    if not f:
+        return error('請選擇證書文件')
+    allowed_exts = {'.pem', '.crt', '.cer', '.ca-bundle', '.p7b'}
+    import os
+    ext = os.path.splitext(f.name)[1].lower()
+    if ext not in allowed_exts:
+        return error(f'不支持的文件類型 {ext}，請上傳 .pem / .crt / .cer 文件')
+    if f.size > 1024 * 512:   # 512 KB 上限
+        return error('證書文件不能超過 512 KB')
+
+    # 存儲到 certs/ 目錄
+    from django.conf import settings
+    cert_dir = os.path.join(settings.BASE_DIR, 'certs')
+    os.makedirs(cert_dir, exist_ok=True)
+    import time as _t
+    safe_name = f'{int(_t.time())}_{f.name.replace(" ", "_")}'
+    cert_path = os.path.join(cert_dir, safe_name)
+    with open(cert_path, 'wb') as fp:
+        for chunk in f.chunks():
+            fp.write(chunk)
+    return success({'path': cert_path, 'filename': safe_name}, '證書上傳成功')
+
+
+@csrf_exempt
+def ssl_cert_list(request):
+    """GET /api/ssl/certs/ — 列出已上傳的證書"""
+    import os
+    from django.conf import settings
+    cert_dir = os.path.join(settings.BASE_DIR, 'certs')
+    if not os.path.isdir(cert_dir):
+        return success({'items': []})
+    items = []
+    for name in sorted(os.listdir(cert_dir)):
+        p = os.path.join(cert_dir, name)
+        if os.path.isfile(p):
+            items.append({
+                'filename': name,
+                'path':     p,
+                'size':     os.path.getsize(p),
+            })
+    return success({'items': items})
+
+
 def report_list(request):
     page      = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 10))
@@ -1092,7 +1149,7 @@ def auth_logout_view(request):
 @csrf_exempt
 def auth_me(request):
     if not request.user.is_authenticated:
-        return JsonResponse({'code': 401, 'message': '未登錄', 'data': None, 'timestamp': None})
+        return error('未登錄', code=401)
     profile = get_profile(request.user)
     return success({
         'username':     request.user.username,
@@ -1173,6 +1230,14 @@ def account_detail(request, pk):
         # 不允許修改 admin 自己的角色
         if user.username == 'admin' and body.get('role') == 'normal':
             return error('不能修改 admin 賬戶的角色')
+
+        # 如果提交了新用戶名，校驗唯一性
+        new_username = body.get('username', '').strip()
+        if new_username and new_username != user.username:
+            if User.objects.exclude(pk=pk).filter(username=new_username).exists():
+                return error(f'用戶名 {new_username} 已被使用')
+            user.username = new_username
+            user.save()
 
         new_pwd = body.get('password', '').strip()
         if new_pwd:

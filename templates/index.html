@@ -355,6 +355,14 @@
         <div class="mb-2"><label class="form-label">執行後發郵件報告</label>
           <div class="input-group input-group-sm"><div class="input-group-text"><input type="checkbox" id="rnrEmail"></div>
           <input type="text" class="form-control" id="rnrEmailTo" placeholder="收件人，多個逗號分隔"></div></div>
+        <div class="mb-3 d-flex gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="rnrStopOnFail">
+            <label class="form-check-label small">
+              <i class="fas fa-stop-circle text-danger me-1"></i>失敗立即停止（聯動測試推薦開啟）
+            </label>
+          </div>
+        </div>
         <div id="rnrSel" class="d-flex flex-wrap gap-1 p-2 border rounded mb-3" style="min-height:38px;background:#f8fafc"><span class="text-muted small">未選擇接口</span></div>
         <button class="btn btn-success w-100" onclick="runBatch()"><i class="fas fa-rocket me-2"></i>開始批量執行</button>
       </div></div>
@@ -473,6 +481,7 @@
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tDA">DB斷言<span class="dt ms-1">DB</span></a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tSql">前後置SQL</a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tRedis">前置Redis<span class="badge bg-danger ms-1" style="font-size:.6rem">RD</span></a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tSsl">SSL <span class="badge bg-success ms-1" style="font-size:.6rem">🔒</span></a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tEnc">加密 <span class="badge bg-danger" style="font-size:.6rem">GCM</span></a></li>
     </ul>
     <!-- 內建動態變量提示（每次請求自動生成，可在任意欄位使用） -->
@@ -553,6 +562,45 @@
         <button class="btn btn-sm btn-outline-danger mt-2" onclick="addPreRedis()">
           <i class="fas fa-plus me-1"></i>添加 Redis 取值規則
         </button>
+      </div>
+      <div class="tab-pane fade" id="tSsl">
+        <div class="fst">SSL / HTTPS 驗證設置</div>
+        <div class="mb-3">
+          <label class="form-label">SSL 驗證模式</label>
+          <select class="form-select" id="apiSslVerify" onchange="togSslCert()">
+            <option value="true">✅ 驗證 SSL 證書（默認，安全）</option>
+            <option value="false">⚠️ 跳過 SSL 驗證（忽略自簽名 / 內網證書）</option>
+            <option value="custom">📁 使用自定義 CA 證書</option>
+          </select>
+          <div class="form-text text-warning" id="sslWarnText" style="display:none">
+            <i class="fas fa-exclamation-triangle me-1"></i>跳過 SSL 驗證存在安全風險，僅建議在內網測試環境使用。
+          </div>
+        </div>
+        <div id="sslCertSection" style="display:none">
+          <div class="fst mb-2">自定義 CA 證書 <small class="text-muted fw-normal">（支持 .pem / .crt / .cer）</small></div>
+          <div class="row g-2 mb-2">
+            <div class="col-12">
+              <select class="form-select form-select-sm" id="apiSslCert" style="font-family:monospace">
+                <option value="">— 請選擇已上傳的證書 —</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <label class="btn btn-sm btn-outline-primary mb-0" for="sslCertFile">
+              <i class="fas fa-upload me-1"></i>上傳新證書
+            </label>
+            <input type="file" id="sslCertFile" accept=".pem,.crt,.cer,.ca-bundle" style="display:none" onchange="uploadSslCert(this)">
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadSslCerts()">
+              <i class="fas fa-sync fa-xs me-1"></i>刷新列表
+            </button>
+            <span class="text-muted small" id="sslUploadStatus"></span>
+          </div>
+          <div class="mt-2">
+            <label class="form-label form-label-sm">或手動輸入證書路徑</label>
+            <input type="text" class="form-control form-control-sm ca" id="apiSslCertPath"
+              placeholder="/path/to/ca-bundle.pem（選擇上傳後自動填入）">
+          </div>
+        </div>
       </div>
       <div class="tab-pane fade" id="tEnc">
         <div class="fst">加密設置</div>
@@ -797,10 +845,20 @@ function toast(msg, t='success') {
 }
 function load(show, t='執行中...') { $('lov').style.display = show ? 'flex' : 'none'; $('lt').textContent = t; }
 async function R(method, url, body=null) {
-  const o = {method, headers:{'Content-Type':'application/json'}};
+  const o = {method, credentials:'same-origin', headers:{'Content-Type':'application/json'}};
   if (body) o.body = JSON.stringify(body);
-  const res = await fetch(url, o);
-  return res.json();
+  try {
+    const res = await fetch(url, o);
+    const data = await res.json();
+    // Session 過期或未登錄：全局跳轉到登錄頁
+    if (data.code === 401 && !url.includes('/auth/')) {
+      window.location.href = '/login';
+      return data;
+    }
+    return data;
+  } catch(err) {
+    return {code: -1, message: '網絡錯誤: ' + err.message, data: null};
+  }
 }
 let _debTimer = null;
 function debLoad(fn, ms) { clearTimeout(_debTimer); _debTimer = setTimeout(fn, ms); }
@@ -999,6 +1057,9 @@ function clearApiForm() {
   $('apiSort').value='0'; $('apiTimeout').value='30';
   $('apiAsync').checked=false; $('apiSession').checked=false; $('apiEnc').checked=false;
   $('apiEncAlgo').value=''; $('apiEncKey').value='';
+  const sv = $('apiSslVerify'); if(sv) sv.value='true';
+  const sc = $('apiSslCertPath'); if(sc) sc.value='';
+  togSslCert();
   $('globalEncSec').style.display='none'; $('fieldEncSec').style.display='none';
   $('encRules').innerHTML='';
   $('exRules').innerHTML=''; $('asRules').innerHTML='';
@@ -1031,6 +1092,9 @@ async function editApi(id) {
   $('apiAsync').checked=a.use_async; $('apiSession').checked=a.use_session;
   $('apiEnc').checked=a.encrypted;
   $('apiEncAlgo').value=a.encryption_algorithm||'';
+  const sv = $('apiSslVerify'); if(sv) sv.value = a.ssl_verify||'true';
+  const sc = $('apiSslCertPath'); if(sc) sc.value = a.ssl_cert||'';
+  togSslCert();
   $('apiEncKey').value=a.encryption_key||'';
   togEncMode();
   $('apiPreSql').value=a.pre_sql||''; $('apiPostSql').value=a.post_sql||'';
@@ -1098,6 +1162,53 @@ function updBodyTypeHint() {
     ta.placeholder = placeholders[bt] || '';
   }
 }
+// ══════════ SSL 驗證 ══════════
+function togSslCert() {
+  const v = $('apiSslVerify')?.value;
+  const sec = $('sslCertSection');
+  const warn = $('sslWarnText');
+  if (sec) sec.style.display = v === 'custom' ? '' : 'none';
+  if (warn) warn.style.display = v === 'false' ? '' : 'none';
+  if (v === 'custom') loadSslCerts();
+}
+
+async function loadSslCerts() {
+  const r = await R('GET', '/api/ssl/certs/');
+  if (r.code !== 0) return;
+  const sel = $('apiSslCert');
+  if (!sel) return;
+  const items = r.data.items || [];
+  const cur = $('apiSslCertPath')?.value || '';
+  sel.innerHTML = '<option value="">— 請選擇已上傳的證書 —</option>' +
+    items.map(c => '<option value="'+eh(c.path)+'"'+(c.path===cur?' selected':'')+'>'+eh(c.filename)+'</option>').join('');
+  sel.onchange = () => { const p=$('apiSslCertPath'); if(p) p.value=sel.value; };
+}
+
+async function uploadSslCert(input) {
+  const f = input.files[0]; if (!f) return;
+  const status = $('sslUploadStatus');
+  if (status) status.textContent = '上傳中...';
+  const fd = new FormData();
+  fd.append('cert', f);
+  try {
+    const res = await fetch('/api/ssl/cert/upload/', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await res.json();
+    if (data.code === 0) {
+      toast('證書上傳成功：' + data.data.filename);
+      if (status) status.textContent = '✓ ' + data.data.filename;
+      const p = $('apiSslCertPath'); if (p) p.value = data.data.path;
+      await loadSslCerts();
+      const sel = $('apiSslCert'); if (sel) sel.value = data.data.path;
+    } else {
+      toast(data.message, 'danger');
+      if (status) status.textContent = '✗ 上傳失敗';
+    }
+  } catch(e) {
+    toast('上傳失敗: ' + e.message, 'danger');
+  }
+  input.value = '';
+}
+
 function togEncMode() {
   const algo = $('apiEncAlgo')?.value || '';
   // 所有算法都顯示整體加密選項
@@ -1307,6 +1418,8 @@ function colApiData() {
     assertions:JSON.stringify(asRules),
     deepdiff_assertions:JSON.stringify(ddRules),
     db_assertions:JSON.stringify(daRules),
+    ssl_verify: $('apiSslVerify')?.value || 'true',
+    ssl_cert:   ($('apiSslVerify')?.value === 'custom' ? ($('apiSslCertPath')?.value||'') : ''),
     pre_sql_db_id:$('apiPreDb').value||null, pre_sql:$('apiPreSql').value,
     post_sql_db_id:$('apiPostDb').value||null, post_sql:$('apiPostSql').value,
     pre_redis_rules: JSON.stringify([...$('preRedisRules').querySelectorAll('.pre-redis-rule')].map(r=>({
@@ -1801,7 +1914,8 @@ function rmRnr(id) { S.rnrSel.delete(id); const cb=document.querySelector('.rnr-
 async function runBatch() {
   const ids=[...S.rnrSel]; if(!ids.length){toast('請選擇至少一個接口','warning');return;}
   load(true,'批量執行 '+ids.length+' 個接口...');
-  const body={api_ids:ids, report_name:$('rnrName').value.trim()};
+  const stopOnFail = !!$('rnrStopOnFail')?.checked;
+  const body={api_ids:ids, report_name:$('rnrName').value.trim(), stop_on_failure: stopOnFail};
   const r = await R('POST','/api/run/batch/',body);
   load(false);
   if (r.code!==0){toast(r.message,'danger');return;}
