@@ -1,0 +1,10 @@
+Django==5.1.4
+requests==2.32.3
+httpx==0.28.1
+pycryptodome==3.21.0
+django-cors-headers==4.6.0
+PyMySQL==1.1.1
+redis==5.2.1
+APScheduler==3.10.4
+deepdiff==7.0.1
+locust==2.32.2

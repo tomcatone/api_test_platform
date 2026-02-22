@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>API 接口測試平台 v3</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+:root{--pr:#4f46e5;--pl:#6366f1;--ok:#10b981;--err:#ef4444;--warn:#f59e0b;--dark:#1e1b4b;--sw:230px}
+*{box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;margin:0}
+.sb{position:fixed;left:0;top:0;bottom:0;width:var(--sw);background:var(--dark);color:#c7d2fe;display:flex;flex-direction:column;z-index:100;box-shadow:2px 0 12px rgba(0,0,0,.3)}
+.sb-brand{padding:14px 16px;font-size:.95rem;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px}
+.sb-brand i{color:#818cf8;font-size:1.1rem}
+.sb-nav{flex:1;padding:6px 0;overflow-y:auto}
+.sb-nav::-webkit-scrollbar{width:3px}.sb-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+.grp{padding:10px 14px 2px;font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;font-weight:700}
+.nb{display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;border:none;background:transparent;color:#a5b4fc;font-size:.82rem;cursor:pointer;transition:all .15s;text-align:left;border-left:3px solid transparent}
+.nb:hover{background:rgba(99,102,241,.15);color:#e0e7ff}.nb.active{background:rgba(99,102,241,.25);color:#fff;border-left-color:#818cf8}
+.nb i{width:15px;text-align:center}
+.sb-foot{padding:8px 14px;border-top:1px solid rgba(255,255,255,.1);font-size:.68rem;color:#6366f1}
+.main{margin-left:var(--sw);padding:20px;min-height:100vh}
+.page{display:none}.page.active{display:block}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e2e8f0}
+.pt{font-size:1.2rem;font-weight:700;color:#1e293b;margin:0}
+.card{border:none;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.card-header{background:#fff;border-bottom:1px solid #f1f5f9;padding:10px 14px;border-radius:12px 12px 0 0!important;font-weight:600;font-size:.88rem}
+.stat{background:#fff;border-radius:10px;padding:12px 14px;box-shadow:0 1px 6px rgba(0,0,0,.07);display:flex;align-items:center;gap:10px}
+.si{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.15rem}
+.sl{font-size:.72rem;color:#64748b;margin-bottom:1px}.sv{font-size:1.35rem;font-weight:700;color:#1e293b}
+.tw{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);overflow:hidden}
+.table{margin:0}.table thead th{background:#f8fafc;color:#475569;font-weight:600;font-size:.78rem;border-bottom:2px solid #e2e8f0;padding:8px 12px}
+.table td{padding:8px 12px;vertical-align:middle;font-size:.82rem;border-bottom:1px solid #f1f5f9}
+.table tbody tr:hover{background:#f8fafc}.table tbody tr:last-child td{border-bottom:none}
+.bm{display:inline-block;padding:2px 6px;border-radius:4px;font-size:.68rem;font-weight:700}
+.get{background:#dbeafe;color:#1d4ed8}.post{background:#dcfce7;color:#15803d}.put{background:#fef3c7;color:#92400e}.delete{background:#fee2e2;color:#991b1b}.patch{background:#f3e8ff;color:#6b21a8}
+.bp{background:#d1fae5;color:#065f46}.bf{background:#fee2e2;color:#991b1b}.be{background:#fef3c7;color:#92400e}
+.sb2{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.sb2 .form-control,.sb2 .form-select{max-width:170px;font-size:.82rem}
+.pgw{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff;border-top:1px solid #f1f5f9}
+.pagination{margin:0}.page-link{font-size:.78rem;padding:3px 8px;color:var(--pr)}
+.page-item.active .page-link{background-color:var(--pr);border-color:var(--pr)}
+.form-label{font-weight:600;font-size:.79rem;color:#374151;margin-bottom:2px}
+.form-control,.form-select{font-size:.82rem;border-radius:7px;border-color:#e2e8f0}
+.form-control:focus,.form-select:focus{border-color:var(--pl);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.ca{font-family:'Consolas',monospace;font-size:.77rem;background:#f8fafc}
+.fst{font-size:.86rem;font-weight:700;color:var(--pr);margin:10px 0 6px;border-left:3px solid var(--pr);padding-left:7px}
+.btn-primary{background:var(--pr);border-color:var(--pr)}.btn-primary:hover{background:var(--pl);border-color:var(--pl)}
+.btn-sm{font-size:.75rem;padding:3px 8px}
+.bi{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+.modal-content{border-radius:13px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-header{background:var(--pr);color:#fff;border-radius:13px 13px 0 0;padding:12px 16px}
+.modal-title{font-weight:700;font-size:.95rem}.bcw{filter:invert(1) grayscale(100%) brightness(200%)}
+.modal-footer{background:#f8fafc;border-radius:0 0 13px 13px}
+.at .nav-link{font-size:.79rem;padding:4px 10px;color:#64748b}.at .nav-link.active{color:var(--pr);font-weight:600}
+.rb{background:#0f172a;color:#e2e8f0;border-radius:9px;padding:12px;font-family:'Consolas',monospace;font-size:.76rem;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.rb .rk{color:#93c5fd}.rb .rvs{color:#86efac}.rb .rvn{color:#fca5a5}.rb .rvb{color:#fbbf24}
+.sqr{background:#0f172a;color:#a5f3fc;border-radius:7px;padding:11px;font-family:'Consolas',monospace;font-size:.76rem;max-height:260px;overflow-y:auto;white-space:pre-wrap}
+.locust-script{background:#1e1b4b;color:#c7d2fe;border-radius:9px;padding:14px;font-family:'Consolas',monospace;font-size:.74rem;max-height:420px;overflow-y:auto;white-space:pre;border:1px solid #312e81}
+.lov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999}
+.lb{background:#fff;border-radius:12px;padding:20px 28px;text-align:center}
+.spinner-border{color:var(--pr)}
+.cp{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.pp{padding:3px 10px;border-radius:18px;font-size:.76rem;cursor:pointer;border:1.5px solid #e2e8f0;background:#fff;color:#475569;transition:all .15s}
+.pp:hover,.pp.active{background:var(--pr);color:#fff;border-color:var(--pr)}
+.rbar{height:9px;border-radius:5px;overflow:hidden;background:#f1f5f9;display:flex}
+.rp{background:var(--ok)}.rf{background:var(--err)}.re{background:var(--warn)}
+.enc{background:#fef9f0;border:1px dashed #fbbf24;border-radius:7px;padding:10px;margin-top:6px}
+.ar{background:#f8fafc;border-radius:7px;padding:8px;margin-bottom:6px;border:1px solid #e2e8f0;position:relative}
+.er{background:#f0fdf4;border-radius:7px;padding:8px;margin-bottom:6px;border:1px solid #bbf7d0;position:relative}
+.dr{background:#fdf4ff;border-radius:7px;padding:8px;margin-bottom:6px;border:1px solid #e9d5ff;position:relative}
+.ddr{background:#eff6ff;border-radius:7px;padding:8px;margin-bottom:6px;border:1px solid #bfdbfe;position:relative}
+.rmb{position:absolute;top:6px;right:6px}
+.tc{position:fixed;top:16px;right:16px;z-index:10000}
+.tm{background:#fff;border-radius:9px;padding:8px 13px;box-shadow:0 4px 20px rgba(0,0,0,.15);margin-bottom:6px;border-left:4px solid var(--pr);display:flex;align-items:center;gap:8px;font-size:.82rem;animation:sli .2s ease}
+.tm.success{border-left-color:var(--ok)}.tm.danger{border-left-color:var(--err)}.tm.warning{border-left-color:var(--warn)}
+@keyframes sli{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+.asl{max-height:360px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:7px}
+.asi{display:flex;align-items:center;gap:7px;padding:6px 11px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:.81rem}
+.asi:hover{background:#f8fafc}.asi:last-child{border-bottom:none}
+.at2{display:inline-block;padding:2px 5px;border-radius:3px;font-size:.67rem;background:#ecfdf5;color:#059669;font-weight:600}
+.dt{display:inline-block;padding:2px 5px;border-radius:3px;font-size:.67rem;background:#f3e8ff;color:#7c3aed;font-weight:600}
+.lt{display:inline-block;padding:2px 5px;border-radius:3px;font-size:.67rem;background:#fff7ed;color:#c2410c;font-weight:600}
+.rklist{max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:7px;background:#fff}
+.rki{display:flex;align-items:center;gap:7px;padding:5px 11px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:.79rem}
+.rki:hover{background:#f8fafc}.rki:last-child{border-bottom:none}
+.cronhelp{background:#f8fafc;border-radius:7px;padding:9px 12px;font-size:.75rem;color:#475569;line-height:1.9}
+.cronhelp code{background:#e2e8f0;padding:1px 4px;border-radius:3px;color:#7c3aed}
+.ts-active{color:var(--ok);font-weight:600}.ts-paused{color:var(--warn);font-weight:600}.ts-stopped{color:#94a3b8}
+.locust-stat{text-align:center;background:#f8fafc;border-radius:9px;padding:12px 8px}
+.locust-stat .val{font-size:1.3rem;font-weight:700;color:#1e293b}
+.locust-stat .lbl{font-size:.72rem;color:#64748b}
+.pulse{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body>
+<div class="tc" id="tc"></div>
+<div class="lov" id="lov" style="display:none"><div class="lb"><div class="spinner-border mb-2"></div><div id="lt">執行中...</div></div></div>
+
+<!-- Sidebar -->
+<nav class="sb">
+  <div class="sb-brand"><i class="fas fa-flask"></i><span>API 測試平台 v3</span></div>
+  <div class="sb-nav">
+    <div class="grp">總覽</div>
+    <button class="nb active" data-page="dashboard"><i class="fas fa-tachometer-alt"></i>控制台</button>
+    <div class="grp">接口管理</div>
+    <button class="nb" data-page="apis"><i class="fas fa-plug"></i>接口列表</button>
+    <button class="nb" data-page="categories"><i class="fas fa-tags"></i>接口分類</button>
+    <div class="grp">數據源配置</div>
+    <button class="nb" data-page="variables"><i class="fas fa-key"></i>全局變量/Token</button>
+    <button class="nb" data-page="databases"><i class="fas fa-database"></i>MySQL 配置</button>
+    <button class="nb" data-page="redis"><i class="fas fa-server"></i>Redis 配置</button>
+    <button class="nb" data-page="redis_tool"><i class="fas fa-terminal"></i>Redis 工具</button>
+    <div class="grp">通知 &amp; 郵件</div>
+    <button class="nb" data-page="email"><i class="fas fa-envelope"></i>郵件配置</button>
+    <div class="grp">執行 &amp; 報告</div>
+    <button class="nb" data-page="scheduler"><i class="fas fa-clock"></i>定時任務</button>
+    <button class="nb" data-page="runner"><i class="fas fa-play-circle"></i>批量執行</button>
+    <button class="nb" data-page="locust"><i class="fas fa-bug"></i>壓力測試 Locust</button>
+    <button class="nb" data-page="sql_tool"><i class="fas fa-table"></i>SQL 工具</button>
+    <button class="nb" data-page="reports"><i class="fas fa-chart-bar"></i>測試報告</button>
+  </div>
+  <div class="sb-foot">deepdiff · asyncio · httpx · redis · APScheduler</div>
+</nav>
+
+<div class="main">
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="page-dashboard" class="page active">
+  <div class="ph"><h1 class="pt"><i class="fas fa-tachometer-alt me-2 text-primary"></i>控制台</h1>
+    <button class="btn btn-sm btn-primary" onclick="loadDash()"><i class="fas fa-sync me-1"></i>刷新</button></div>
+  <div class="row g-3 mb-3" id="dashStats">
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#ede9fe"><i class="fas fa-plug" style="color:#7c3aed"></i></div><div><div class="sl">接口</div><div class="sv" id="s-api">-</div></div></div></div>
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#dbeafe"><i class="fas fa-database" style="color:#1d4ed8"></i></div><div><div class="sl">MySQL</div><div class="sv" id="s-db">-</div></div></div></div>
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#fff1f2"><i class="fas fa-server" style="color:#be123c"></i></div><div><div class="sl">Redis</div><div class="sv" id="s-redis">-</div></div></div></div>
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#ecfdf5"><i class="fas fa-clock" style="color:#059669"></i></div><div><div class="sl">定時任務</div><div class="sv" id="s-task">-</div></div></div></div>
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#fef3c7"><i class="fas fa-key" style="color:#b45309"></i></div><div><div class="sl">全局變量</div><div class="sv" id="s-var">-</div></div></div></div>
+    <div class="col-6 col-md-2"><div class="stat"><div class="si" style="background:#dcfce7"><i class="fas fa-chart-bar" style="color:#15803d"></i></div><div><div class="sl">報告</div><div class="sv" id="s-rpt">-</div></div></div></div>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-7"><div class="card"><div class="card-header">最近測試報告</div>
+      <div class="tw"><table class="table"><thead><tr><th>報告名稱</th><th>通過率</th><th>結果</th><th>時間</th><th></th></tr></thead>
+      <tbody id="dashRpt"><tr><td colspan="5" class="text-center text-muted py-3">加載中...</td></tr></tbody></table></div></div></div>
+    <div class="col-md-5"><div class="card"><div class="card-header">快速操作</div><div class="card-body"><div class="d-grid gap-2">
+      <button class="btn btn-outline-primary btn-sm" onclick="go('apis');openApiModal()"><i class="fas fa-plus me-2"></i>新增接口</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="go('redis_tool')"><i class="fas fa-server me-2"></i>Redis 取驗證碼→變量</button>
+      <button class="btn btn-outline-success btn-sm" onclick="go('runner')"><i class="fas fa-play me-2"></i>批量執行測試</button>
+      <button class="btn btn-outline-warning btn-sm" onclick="go('scheduler');openTaskModal()"><i class="fas fa-clock me-2"></i>新建定時任務</button>
+      <button class="btn btn-outline-dark btn-sm" onclick="go('locust')"><i class="fas fa-bug me-2"></i>Locust 壓力測試</button>
+    </div></div></div></div>
+  </div>
+</div>
+
+<!-- ═══ APIS ═══ -->
+<div id="page-apis" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-plug me-2 text-primary"></i>接口管理</h1><button class="btn btn-primary btn-sm" onclick="openApiModal()"><i class="fas fa-plus me-1"></i>添加接口</button></div>
+  <div class="cp" id="catPills"><div class="pp active" onclick="fCat('')">全部</div></div>
+  <div class="sb2">
+    <input type="text" class="form-control" id="apiSrc" placeholder="搜索接口名/URL..." oninput="debLoad(loadApis,350)">
+    <select class="form-select" id="mthF" onchange="loadApis()"><option value="">所有方法</option><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+  </div>
+  <div class="tw"><table class="table"><thead><tr>
+    <th><input type="checkbox" id="selAll" onchange="togSelAll(this)"></th>
+    <th>接口名稱</th><th>分類</th><th>方法</th><th>URL</th><th>標記</th><th>更新時間</th><th>操作</th>
+  </tr></thead><tbody id="apiTb"></tbody></table>
+  <div class="pgw"><div class="text-muted small" id="apiTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="apiPg"></ul></nav></div></div>
+  <div class="mt-2 d-flex gap-2">
+    <button class="btn btn-success btn-sm" onclick="runSel()"><i class="fas fa-play me-1"></i>執行已選</button>
+    <button class="btn btn-danger btn-sm" onclick="delSel()"><i class="fas fa-trash me-1"></i>批量刪除</button>
+  </div>
+</div>
+
+<!-- ═══ CATEGORIES ═══ -->
+<div id="page-categories" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-tags me-2 text-primary"></i>接口分類</h1><button class="btn btn-primary btn-sm" onclick="openCatModal()"><i class="fas fa-plus me-1"></i>添加分類</button></div>
+  <div class="row g-3" id="catCards"><div class="col-12 text-center text-muted py-4">加載中...</div></div>
+</div>
+
+<!-- ═══ VARIABLES ═══ -->
+<div id="page-variables" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-key me-2 text-primary"></i>全局變量 / Token</h1>
+    <div class="d-flex gap-2"><button class="btn btn-warning btn-sm" onclick="openTokModal()"><i class="fas fa-magic me-1"></i>生成Token</button><button class="btn btn-primary btn-sm" onclick="openVarModal()"><i class="fas fa-plus me-1"></i>添加</button></div></div>
+  <div class="alert alert-info py-2 mb-3 small"><i class="fas fa-info-circle me-1"></i>在 URL / Headers / Body / SQL / Redis Key 中使用 <code>{{變量名}}</code> 引用變量</div>
+  <div class="tw"><table class="table"><thead><tr><th>變量名</th><th>類型</th><th>值</th><th>描述</th><th>更新</th><th>操作</th></tr></thead>
+  <tbody id="varTb"></tbody></table>
+  <div class="pgw"><div class="text-muted small" id="varTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="varPg"></ul></nav></div></div>
+</div>
+
+<!-- ═══ DATABASES ═══ -->
+<div id="page-databases" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-database me-2 text-primary"></i>MySQL 配置</h1><button class="btn btn-primary btn-sm" onclick="openDbModal()"><i class="fas fa-plus me-1"></i>添加</button></div>
+  <div class="row g-3" id="dbCards"><div class="col-12 text-center text-muted py-4">加載中...</div></div>
+</div>
+
+<!-- ═══ REDIS CONFIG ═══ -->
+<div id="page-redis" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-server me-2" style="color:#be123c"></i>Redis 配置</h1><button class="btn btn-primary btn-sm" onclick="openRedisModal()"><i class="fas fa-plus me-1"></i>添加</button></div>
+  <div class="alert alert-info py-2 mb-3 small"><i class="fas fa-info-circle me-1"></i>Redis 配置用於 Redis 工具 和 驗證碼讀取，支持 String/Hash/List/Set/ZSet 類型。</div>
+  <div class="row g-3" id="redisCards"><div class="col-12 text-center text-muted py-4">加載中...</div></div>
+</div>
+
+<!-- ═══ REDIS TOOL ═══ -->
+<div id="page-redis_tool" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-terminal me-2" style="color:#be123c"></i>Redis 操作工具</h1></div>
+  <div class="row g-3">
+    <div class="col-md-5">
+      <div class="card mb-3"><div class="card-header">連接 &amp; 操作</div><div class="card-body p-3">
+        <div class="mb-2"><label class="form-label">選擇 Redis 連接</label>
+          <select class="form-select" id="rdConn"></select></div>
+        <div class="mb-2"><label class="form-label">操作類型</label>
+          <select class="form-select" id="rdAction" onchange="rdToggleFields()">
+            <option value="scan">SCAN 掃描 Key</option>
+            <option value="get">GET 讀取</option>
+            <option value="set">SET 寫入</option>
+            <option value="delete">DELETE 刪除</option>
+            <option value="ttl">TTL 查詢</option>
+            <option value="expire">EXPIRE 設置過期</option>
+            <option value="fetch_captcha">🔑 獲取驗證碼 → 全局變量</option>
+          </select></div>
+        <div id="rdPatternWrap" class="mb-2"><label class="form-label">Pattern</label>
+          <input type="text" class="form-control ca" id="rdPattern" value="*" placeholder="sms:captcha:*"></div>
+        <div id="rdKeyWrap" class="mb-2" style="display:none"><label class="form-label">Key</label>
+          <input type="text" class="form-control ca" id="rdKey" placeholder="sms:captcha:13800138000"></div>
+        <div id="rdValWrap" class="mb-2" style="display:none"><label class="form-label">Value</label>
+          <input type="text" class="form-control ca" id="rdVal"></div>
+        <div id="rdTtlWrap" class="mb-2" style="display:none"><label class="form-label">TTL (秒，0=永久)</label>
+          <input type="number" class="form-control" id="rdTtl" value="300"></div>
+        <div id="rdCaptchaWrap" style="display:none">
+          <div class="alert alert-warning py-2 small mb-2"><i class="fas fa-info-circle me-1"></i>從 Redis 獲取驗證碼，自動存入全局變量，接口 Body 中直接使用 <code>{{captcha}}</code></div>
+          <div class="mb-2"><label class="form-label">Redis Key <small class="text-muted">(支持 {{變量名}})</small></label>
+            <input type="text" class="form-control ca" id="rdCapKey" placeholder="sms:captcha:{{mobile}}"></div>
+          <div class="mb-2"><label class="form-label">存入全局變量名</label>
+            <input type="text" class="form-control" id="rdCapVar" value="captcha"></div>
+          <div class="mb-2"><label class="form-label">提取 JSON 字段 <small class="text-muted">(值為JSON時填寫，如 code)</small></label>
+            <input type="text" class="form-control" id="rdCapField" placeholder="code (選填)"></div>
+        </div>
+        <button class="btn btn-danger w-100 mt-2" onclick="execRedis()"><i class="fas fa-play me-1"></i>執行</button>
+      </div></div>
+    </div>
+    <div class="col-md-7">
+      <div class="card"><div class="card-header" id="rdResTitle">結果</div>
+        <div class="card-body p-0">
+          <div id="rdKeyListWrap" style="display:none">
+            <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2">
+              <span class="text-muted small" id="rdKeyCount"></span>
+              <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="rdCopyKeys()"><i class="fas fa-copy me-1"></i>複製全部</button>
+            </div>
+            <div class="rklist" id="rdKeyList"></div>
+          </div>
+          <div id="rdResWrap" class="p-3" style="display:none">
+            <div class="sqr" id="rdResBox"></div>
+          </div>
+          <div id="rdCapResWrap" class="p-3" style="display:none">
+            <div class="alert alert-success mb-2" id="rdCapMsg"></div>
+            <table class="table table-sm table-bordered"><tbody id="rdCapDetail"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ EMAIL ═══ -->
+<div id="page-email" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-envelope me-2 text-primary"></i>郵件配置 (SMTP)</h1><button class="btn btn-primary btn-sm" onclick="openEmailModal()"><i class="fas fa-plus me-1"></i>添加</button></div>
+  <div class="alert alert-info py-2 mb-3 small"><i class="fas fa-info-circle me-1"></i>配置 SMTP 後，定時任務執行完畢、批量執行完畢可自動發送精美 HTML 報告郵件。</div>
+  <div class="row g-3" id="emailCards"><div class="col-12 text-center text-muted py-4">加載中...</div></div>
+</div>
+
+<!-- ═══ SCHEDULER ═══ -->
+<div id="page-scheduler" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-clock me-2 text-primary"></i>定時任務</h1><button class="btn btn-primary btn-sm" onclick="openTaskModal()"><i class="fas fa-plus me-1"></i>新建</button></div>
+  <div class="alert alert-info py-2 mb-3 small"><i class="fas fa-info-circle me-1"></i>Cron 格式：<code>分 時 日 月 週</code>。例：<code>0 9 * * 1-5</code>（週一至五09:00）· <code>*/30 * * * *</code>（每30分鐘）</div>
+  <div class="tw"><table class="table"><thead><tr><th>任務名稱</th><th>觸發方式</th><th>下次執行</th><th>狀態</th><th>上次結果</th><th>郵件</th><th>操作</th></tr></thead>
+  <tbody id="taskTb"><tr><td colspan="7" class="text-center text-muted py-4">加載中...</td></tr></tbody></table></div>
+</div>
+
+<!-- ═══ RUNNER ═══ -->
+<div id="page-runner" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-play-circle me-2 text-primary"></i>批量執行</h1></div>
+  <div class="row g-3">
+    <div class="col-md-5"><div class="card"><div class="card-header d-flex justify-content-between align-items-center">選擇接口
+      <div class="d-flex gap-1">
+        <button class="btn btn-outline-primary btn-sm" onclick="rnrAll()">全選</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="rnrNone()">清空</button>
+      </div></div><div class="card-body p-2">
+      <div class="sb2 mb-2">
+        <input type="text" class="form-control" id="rnrSrc" placeholder="搜索..." oninput="loadRnrApis()">
+        <select class="form-select" id="rnrCat" onchange="loadRnrApis()"><option value="">全部分類</option></select>
+      </div>
+      <div class="asl" id="rnrList">加載中...</div>
+    </div></div></div>
+    <div class="col-md-7">
+      <div class="card mb-3"><div class="card-header">執行設置</div><div class="card-body">
+        <div class="mb-2"><label class="form-label">報告名稱（留空自動生成）</label><input type="text" class="form-control" id="rnrName"></div>
+        <div class="mb-2"><label class="form-label">執行後發郵件報告</label>
+          <div class="input-group input-group-sm"><div class="input-group-text"><input type="checkbox" id="rnrEmail"></div>
+          <input type="text" class="form-control" id="rnrEmailTo" placeholder="收件人，多個逗號分隔"></div></div>
+        <div id="rnrSel" class="d-flex flex-wrap gap-1 p-2 border rounded mb-3" style="min-height:38px;background:#f8fafc"><span class="text-muted small">未選擇接口</span></div>
+        <button class="btn btn-success w-100" onclick="runBatch()"><i class="fas fa-rocket me-2"></i>開始批量執行</button>
+      </div></div>
+      <div class="card" id="rnrRes" style="display:none"><div class="card-header">執行結果</div><div class="card-body" id="rnrResBody"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOCUST ═══ -->
+<div id="page-locust" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-bug me-2 text-primary"></i>壓力測試 (Locust)</h1></div>
+  <div class="row g-3">
+    <div class="col-md-5">
+      <div class="card mb-3"><div class="card-header">選擇接口 &amp; 配置</div><div class="card-body p-2">
+        <div class="asl mb-2" id="locustApiList" style="max-height:200px">加載中...</div>
+        <div class="row g-2 mt-1">
+          <div class="col-md-4"><label class="form-label">並發用戶數</label><input type="number" class="form-control" id="lstUsers" value="10" min="1"></div>
+          <div class="col-md-4"><label class="form-label">生成速率(u/s)</label><input type="number" class="form-control" id="lstSpawn" value="2" min="1"></div>
+          <div class="col-md-4"><label class="form-label">執行時長</label><input type="text" class="form-control" id="lstTime" value="60s" placeholder="60s/5m"></div>
+        </div>
+        <div class="mb-2 mt-2"><label class="form-label">收集報告名稱</label><input type="text" class="form-control" id="lstRptName" placeholder="壓測報告-xxx"></div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="locustPreview()"><i class="fas fa-eye me-1"></i>預覽腳本</button>
+          <button class="btn btn-danger btn-sm flex-fill" id="lstStartBtn" onclick="locustStart()"><i class="fas fa-rocket me-1"></i>開始壓測</button>
+          <button class="btn btn-warning btn-sm flex-fill" id="lstStopBtn" onclick="locustStop()" style="display:none"><i class="fas fa-stop me-1"></i>停止</button>
+        </div>
+      </div></div>
+      <div class="card" id="lstScriptCard" style="display:none"><div class="card-header">生成腳本預覽</div>
+        <div class="card-body p-2"><div class="locust-script" id="lstScript"></div></div></div>
+    </div>
+    <div class="col-md-7">
+      <div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center">壓測狀態
+        <span id="lstStatusBadge" class="badge bg-secondary">未開始</span></div>
+        <div class="card-body" id="lstStatusBody">
+          <div class="text-center text-muted py-4"><i class="fas fa-bug fa-2x mb-2 d-block text-muted"></i>選擇接口並點擊「開始壓測」</div>
+        </div></div>
+      <div class="card" id="lstResultCard" style="display:none"><div class="card-header">壓測結果</div>
+        <div class="card-body" id="lstResultBody"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SQL TOOL ═══ -->
+<div id="page-sql_tool" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-table me-2 text-primary"></i>SQL 執行工具</h1></div>
+  <div class="row g-3">
+    <div class="col-md-8"><div class="card"><div class="card-header">SQL 編輯器</div><div class="card-body">
+      <div class="mb-2"><label class="form-label">選擇數據庫</label><select class="form-select" id="sqlDb"><option value="">-- 請選擇 --</option></select></div>
+      <div class="mb-2"><label class="form-label">SQL 語句（支持多條，用 ; 分隔）</label>
+        <textarea class="form-control ca" id="sqlText" rows="8" placeholder="SELECT * FROM users LIMIT 10;&#10;DELETE FROM tmp WHERE id=1;"></textarea></div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-success btn-sm" onclick="runSql()"><i class="fas fa-play me-1"></i>執行</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('sqlText').value=''">清空</button>
+      </div>
+    </div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-header">SQL 模板</div><div class="card-body p-2"><div class="d-grid gap-1">
+      <button class="btn btn-sm btn-outline-secondary text-start" onclick="insSql('select')"><i class="fas fa-search me-1"></i>SELECT 查詢</button>
+      <button class="btn btn-sm btn-outline-secondary text-start" onclick="insSql('count')"><i class="fas fa-hashtag me-1"></i>COUNT 計數</button>
+      <button class="btn btn-sm btn-outline-danger text-start" onclick="insSql('delete')"><i class="fas fa-trash me-1"></i>DELETE 刪除行</button>
+      <button class="btn btn-sm btn-outline-danger text-start" onclick="insSql('truncate')"><i class="fas fa-broom me-1"></i>TRUNCATE 清空表</button>
+      <button class="btn btn-sm btn-outline-secondary text-start" onclick="insSql('tables')"><i class="fas fa-list me-1"></i>SHOW TABLES</button>
+      <button class="btn btn-sm btn-outline-secondary text-start" onclick="insSql('desc')"><i class="fas fa-info-circle me-1"></i>DESCRIBE</button>
+    </div></div></div></div>
+    <div class="col-12" id="sqlResWrap" style="display:none">
+      <div class="card"><div class="card-header" id="sqlResTitle">結果</div><div class="card-body p-0" id="sqlResBody"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ REPORTS ═══ -->
+<div id="page-reports" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-chart-bar me-2 text-primary"></i>測試報告</h1>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadRpts()"><i class="fas fa-sync me-1"></i>刷新</button></div>
+  <div class="tw"><table class="table"><thead><tr><th>報告名稱</th><th>通過率</th><th>通過/失敗/錯誤</th><th>總數</th><th>耗時</th><th>時間</th><th>操作</th></tr></thead>
+  <tbody id="rptTb"></tbody></table>
+  <div class="pgw"><div class="text-muted small" id="rptTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="rptPg"></ul></nav></div></div>
+</div>
+
+<!-- ══════════ MODALS ══════════ -->
+<!-- API Modal -->
+<div class="modal fade" id="apiModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="apiMT">添加接口</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="apiId">
+    <div class="row g-2 mb-2">
+      <div class="col-md-5"><label class="form-label">接口名稱 *</label><input type="text" class="form-control" id="apiName"></div>
+      <div class="col-md-3"><label class="form-label">分類</label><select class="form-select" id="apiCat"><option value="">未分類</option></select></div>
+      <div class="col-md-2"><label class="form-label">排序</label><input type="number" class="form-control" id="apiSort" value="0"></div>
+      <div class="col-md-2"><label class="form-label">超時(秒)</label><input type="number" class="form-control" id="apiTimeout" value="30" min="1"></div>
+      <div class="col-md-2"><label class="form-label">HTTP方法 *</label><select class="form-select" id="apiMth" onchange="togApiBody()"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option></select></div>
+      <div class="col-md-3" id="ctWrap"><label class="form-label">Body類型</label>
+        <select class="form-select" id="apiBodyType">
+          <option value="json">JSON &nbsp;→&nbsp; json=body</option>
+          <option value="data">Data &nbsp;→&nbsp; data=body</option>
+          <option value="params">Params &nbsp;→&nbsp; params=body</option>
+          <option value="form">Form (form-urlencoded)</option>
+          <option value="text">Text/Plain (text/plain)</option>
+          <option value="raw">Raw (自定義/json.dumps)</option>
+          <option value="files">Files (multipart/form-data)</option>
+        </select></div>
+      <div class="col-md-2">
+        <label class="form-label">請求模式</label>
+        <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="apiAsync"><label class="form-check-label small" for="apiAsync"><span class="at2">httpx異步</span></label></div>
+        <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="apiSession"><label class="form-check-label small" for="apiSession">Session保持</label></div>
+      </div>
+      <div class="col-md-5"><label class="form-label">URL * <small class="text-muted">(支持 {{變量名}})</small></label><input type="text" class="form-control" id="apiUrl" placeholder="https://api.example.com/users"></div>
+      <div class="col-md-12"><label class="form-label">描述</label><input type="text" class="form-control" id="apiDesc"></div>
+    </div>
+    <ul class="nav nav-tabs at mb-0" id="apiTabs">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tH">Headers</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tP">Params</a></li>
+      <li class="nav-item" id="tBli"><a class="nav-link" data-bs-toggle="tab" href="#tB">Body <small class="text-muted" id="tBBadge"></small></a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tEx">提取變量</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tAs">HTTP斷言</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tDD">DeepDiff<span class="dt ms-1">DD</span></a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tDA">DB斷言<span class="dt ms-1">DB</span></a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tSql">前後置SQL</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tRedis">前置Redis<span class="badge bg-danger ms-1" style="font-size:.6rem">RD</span></a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tEnc">加密 <span class="badge bg-danger" style="font-size:.6rem">GCM</span></a></li>
+    </ul>
+    <div class="tab-content p-3 border border-top-0 rounded-bottom" style="max-height:340px;overflow-y:auto">
+      <div class="tab-pane fade show active" id="tH">
+        <div class="fst">請求頭 (JSON)</div>
+        <textarea class="form-control ca" id="apiHdr" rows="5" placeholder='{"Authorization":"Bearer {{token}}","Content-Type":"application/json"}'></textarea></div>
+      <div class="tab-pane fade" id="tP">
+        <div class="fst">Query Params (JSON)</div>
+        <textarea class="form-control ca" id="apiPrm" rows="5" placeholder='{"page":"1","size":"10"}'></textarea></div>
+      <div class="tab-pane fade" id="tB">
+        <div class="fst">請求體</div>
+        <div id="bodyTypeHint" class="alert alert-info py-1 small mb-2">JSON 模式：填寫 JSON 對象，自動序列化發送</div>
+        <div id="textPlainGuide" style="display:none" class="alert alert-success py-2 small mb-2">
+          <strong>✅ Text/Plain 模式（對應 Python <code>data=xxx</code>）：</strong><br>
+          • Body 直接填原始內容，例如：<code>10,5,20,1,33,4</code>；支持 <code>{{變量名}}</code><br>
+          • <strong>需要先加密再發送？</strong> 切換到「加密 GCM」Tab → 選 AES-GCM → 填 raw 密鑰 → 勾選「啟用整體 Body 加密」<br>
+          • <span class="fw-bold text-success">完全不需要填字段名</span>，等價：<code>requests.post(url, data=encrypt(body), headers=headers)</code>
+        </div>
+        <textarea class="form-control ca" id="apiBdy" rows="6" placeholder='{"username":"{{user}}","password":"{{pass}}"}'></textarea>
+        <div id="filesHint" style="display:none" class="mt-2 small text-muted"><i class="fas fa-info-circle me-1"></i>文件上傳：在JSON中用 <code>__files__</code> 字段指定文件列表，如 <code>{"__files__":[{"field":"avatar","path":"/tmp/a.jpg"}],"name":"test"}</code></div>
+      </div>
+      <div class="tab-pane fade" id="tEx">
+        <div class="fst">從響應提取變量</div>
+        <p class="text-muted small mb-2">路徑：<code>data.token</code> / <code>data.list[0].id</code></p>
+        <div id="exRules"></div>
+        <button class="btn btn-sm btn-outline-success" onclick="addEx()"><i class="fas fa-plus me-1"></i>添加提取規則</button>
+      </div>
+      <div class="tab-pane fade" id="tAs">
+        <div class="fst">HTTP 斷言規則</div><div id="asRules"></div>
+        <button class="btn btn-sm btn-outline-primary" onclick="addAs()"><i class="fas fa-plus me-1"></i>添加斷言</button>
+      </div>
+      <div class="tab-pane fade" id="tDD">
+        <div class="fst">DeepDiff 深度比對斷言 <span class="dt">DD</span></div>
+        <p class="text-muted small mb-2">使用 <code>deepdiff</code> 庫對響應體深度比對，支持忽略特定字段（如 timestamp/id 等）</p>
+        <div id="ddRules"></div>
+        <button class="btn btn-sm btn-outline-primary" onclick="addDD()"><i class="fas fa-plus me-1"></i>添加DeepDiff斷言</button>
+      </div>
+      <div class="tab-pane fade" id="tDA">
+        <div class="fst">數據庫斷言 <span class="dt">DB</span></div>
+        <p class="text-muted small mb-2">支持<strong>多字段斷言</strong>：每條規則可對查詢結果的多個字段同時做斷言。支持 {{變量名}} 替換 SQL 中的參數。</p>
+        <div id="daRules"></div>
+        <button class="btn btn-sm btn-outline-primary" onclick="addDa()"><i class="fas fa-plus me-1"></i>添加DB斷言</button>
+      </div>
+      <div class="tab-pane fade" id="tSql">
+        <div class="fst">前置 SQL（HTTP 請求前執行）</div>
+        <div class="row g-2 mb-3"><div class="col-md-5"><select class="form-select" id="apiPreDb"><option value="">不使用</option></select></div>
+          <div class="col-12"><textarea class="form-control ca" id="apiPreSql" rows="3" placeholder="DELETE FROM temp WHERE user_id={{user_id}};"></textarea></div></div>
+        <div class="fst">後置 SQL（HTTP 請求後執行）</div>
+        <div class="row g-2"><div class="col-md-5"><select class="form-select" id="apiPostDb"><option value="">不使用</option></select></div>
+          <div class="col-12"><textarea class="form-control ca" id="apiPostSql" rows="3" placeholder="UPDATE orders SET status='done' WHERE id={{order_id}};"></textarea></div></div>
+      </div>
+      <div class="tab-pane fade" id="tRedis">
+        <div class="fst">前置 Redis 取值 <small class="text-muted fw-normal">— 請求前從 Redis 讀取 key，注入為 {{變量名}} 供 Body/Headers/Params 使用</small></div>
+        <div class="alert alert-info py-2 small mb-2">
+          <strong>典型場景：</strong>驗證碼存在 Redis，讀出後填入請求體<br>
+          Key 支持 <code>{{變量名}}</code>，如 <code>sms:{{mobile}}</code>；value 是 JSON 時可指定提取字段
+        </div>
+        <div id="preRedisRules"></div>
+        <button class="btn btn-sm btn-outline-danger mt-2" onclick="addPreRedis()">
+          <i class="fas fa-plus me-1"></i>添加 Redis 取值規則
+        </button>
+      </div>
+      <div class="tab-pane fade" id="tEnc">
+        <div class="fst">加密設置</div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">加密算法</label>
+            <select class="form-select" id="apiEncAlgo" onchange="togEncMode()">
+              <option value="">不使用加密</option>
+              <option value="AES-GCM">AES-GCM（推薦）</option>
+              <option value="AES">AES-CBC</option>
+              <option value="BASE64">BASE64</option>
+              <option value="MD5">MD5</option>
+            </select>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">全局密鑰 raw <small class="text-muted">（Body字段加密的默認密鑰，如 DLMwO2OmfYnEfo7s）</small></label>
+            <input type="text" class="form-control ca" id="apiEncKey" placeholder="DLMwO2OmfYnEfo7s">
+          </div>
+        </div>
+        <!-- 全局 Body 加密 -->
+        <div id="globalEncSec" style="display:none">
+          <div class="enc mb-3">
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="checkbox" id="apiEnc">
+              <label class="form-check-label" for="apiEnc">
+                <strong>啟用整體 Body 加密</strong>
+              </label>
+            </div>
+            <div class="mt-1 ps-4 small text-muted">
+              將整個 body <code>json.dumps</code> 後加密，發送方式由 <strong>Body 類型</strong> 決定：<br>
+              • <strong>Text/Plain</strong> → <code>requests.post(url, data=encrypt(payload), headers={"Content-Type":"text/plain"})</code><br>
+              • <strong>JSON</strong> → 加密結果包裝成 <code>{"encrypted":"..."}</code><br>
+              <span class="text-success">💡 <strong>data= 裸字符串</strong>場景：Body 類型選 <strong>Text/Plain</strong> + 勾選此項即可，<strong>無需填字段名</strong></span>
+            </div>
+          </div>
+        </div>
+        <!-- Body 字段級 AES-GCM 加密規則 -->
+        <div id="fieldEncSec" style="display:none">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="fst mb-0">Body 字段級加密規則 <span class="badge bg-danger ms-1">AES-GCM</span></div>
+            <button class="btn btn-sm btn-outline-danger" onclick="addEncRule()"><i class="fas fa-plus me-1"></i>添加字段規則</button>
+          </div>
+          <div class="alert alert-info py-2 mb-2 small">
+            <strong>使用場景：</strong>
+            <code>{"param": encrypt(json.dumps(payload)), "url": encrypt("user/loginAndRegister")}</code><br>
+            ssrc 支持 <code>{{變量名}}</code> 引用；json_dumps=開啟時先對值做 json.dumps 再加密；raw 留空則使用全局密鑰。
+          </div>
+          <div id="encRules"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+    <button class="btn btn-info btn-sm" onclick="saveRunApi()"><i class="fas fa-play me-1"></i>保存並執行</button>
+    <button class="btn btn-primary btn-sm" onclick="saveApi()"><i class="fas fa-save me-1"></i>保存</button>
+  </div>
+</div></div></div>
+
+<!-- Cat Modal -->
+<div class="modal fade" id="catModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="catMT">添加分類</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="catId">
+    <div class="mb-2"><label class="form-label">名稱 *</label><input type="text" class="form-control" id="catName"></div>
+    <div class="mb-2"><label class="form-label">描述</label><input type="text" class="form-control" id="catDesc"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveCat()">保存</button></div>
+</div></div></div>
+
+<!-- Var Modal -->
+<div class="modal fade" id="varModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="varMT">添加變量</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="varId">
+    <div class="mb-2"><label class="form-label">變量名 *</label><input type="text" class="form-control" id="varName" placeholder="token / captcha"></div>
+    <div class="mb-2"><label class="form-label">類型</label><select class="form-select" id="varType"><option value="string">字符串</option><option value="token">Token</option><option value="json">JSON</option></select></div>
+    <div class="mb-2"><label class="form-label">值 *</label><textarea class="form-control ca" id="varVal" rows="3"></textarea></div>
+    <div class="mb-2"><label class="form-label">描述</label><input type="text" class="form-control" id="varDesc"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveVar()">保存</button></div>
+</div></div></div>
+
+<!-- Token Modal -->
+<div class="modal fade" id="tokModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">生成 Token</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-2"><label class="form-label">保存為變量名</label><input type="text" class="form-control" id="tokVar" value="token"></div>
+    <div class="mb-2"><label class="form-label">Token 類型</label><select class="form-select" id="tokType" onchange="togTokCustom()"><option value="uuid">UUID</option><option value="hex32">HEX32</option><option value="hex64">HEX64</option><option value="urlsafe">URLSafe Base64</option><option value="custom">自定義</option></select></div>
+    <div id="tokCustom" style="display:none" class="mb-2"><label class="form-label">自定義值</label><input type="text" class="form-control" id="tokCustomVal"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-warning btn-sm" onclick="genToken()"><i class="fas fa-magic me-1"></i>生成並保存</button></div>
+</div></div></div>
+
+<!-- DB Modal -->
+<div class="modal fade" id="dbModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="dbMT">MySQL 配置</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="dbId">
+    <div class="row g-2">
+      <div class="col-12"><label class="form-label">配置名稱 *</label><input type="text" class="form-control" id="dbName"></div>
+      <div class="col-md-8"><label class="form-label">主機</label><input type="text" class="form-control" id="dbHost" value="127.0.0.1"></div>
+      <div class="col-md-4"><label class="form-label">端口</label><input type="number" class="form-control" id="dbPort" value="3306"></div>
+      <div class="col-md-6"><label class="form-label">用戶名 *</label><input type="text" class="form-control" id="dbUser"></div>
+      <div class="col-md-6"><label class="form-label">密碼</label><input type="password" class="form-control" id="dbPwd" placeholder="留空不修改"></div>
+      <div class="col-md-8"><label class="form-label">數據庫名 *</label><input type="text" class="form-control" id="dbDb"></div>
+      <div class="col-md-4"><label class="form-label">字符集</label><input type="text" class="form-control" id="dbCharset" value="utf8mb4"></div>
+      <div class="col-12"><label class="form-label">描述</label><input type="text" class="form-control" id="dbDesc"></div>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveDb()">保存</button></div>
+</div></div></div>
+
+<!-- Redis Modal -->
+<div class="modal fade" id="redisModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="redisMT">Redis 配置</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="redisId">
+    <div class="row g-2">
+      <div class="col-12"><label class="form-label">配置名稱 *</label><input type="text" class="form-control" id="redisName"></div>
+      <div class="col-md-8"><label class="form-label">主機</label><input type="text" class="form-control" id="redisHost" value="127.0.0.1"></div>
+      <div class="col-md-4"><label class="form-label">端口</label><input type="number" class="form-control" id="redisPort" value="6379"></div>
+      <div class="col-md-8"><label class="form-label">密碼（無密碼留空）</label><input type="password" class="form-control" id="redisPwd"></div>
+      <div class="col-md-4"><label class="form-label">DB 索引 (0-15)</label><input type="number" class="form-control" id="redisDb" value="0" min="0" max="15"></div>
+      <div class="col-12"><label class="form-label">描述</label><input type="text" class="form-control" id="redisDesc"></div>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveRedis()">保存</button></div>
+</div></div></div>
+
+<!-- Email Modal -->
+<div class="modal fade" id="emailModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="emailMT">郵件配置 (SMTP)</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="emailId">
+    <div class="row g-2">
+      <div class="col-12"><label class="form-label">配置名稱</label><input type="text" class="form-control" id="emailName" value="默認郵件配置"></div>
+      <div class="col-md-8"><label class="form-label">SMTP 主機</label><input type="text" class="form-control" id="emailSmtpHost" placeholder="smtp.163.com"></div>
+      <div class="col-md-4"><label class="form-label">端口</label><input type="number" class="form-control" id="emailSmtpPort" value="465"></div>
+      <div class="col-md-6"><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="emailSsl" checked><label class="form-check-label" for="emailSsl">使用 SSL (端口465)</label></div></div>
+      <div class="col-md-6"><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="emailTls"><label class="form-check-label" for="emailTls">使用 TLS/STARTTLS (端口587)</label></div></div>
+      <div class="col-md-6"><label class="form-label">郵箱賬號 *</label><input type="text" class="form-control" id="emailUser"></div>
+      <div class="col-md-6"><label class="form-label">密碼/授權碼 *</label><input type="password" class="form-control" id="emailPwd"></div>
+      <div class="col-md-8"><label class="form-label">發件人地址</label><input type="text" class="form-control" id="emailFrom"></div>
+      <div class="col-md-4"><label class="form-label">發件人名稱</label><input type="text" class="form-control" id="emailFromName" value="API測試平台"></div>
+      <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="emailActive" checked><label class="form-check-label" for="emailActive">啟用此配置（同時只一個生效）</label></div></div>
+    </div>
+    <div class="mt-2 p-2 bg-light rounded small text-muted">常用SMTP：163=smtp.163.com:465(SSL) · QQ=smtp.qq.com:465(SSL) · Gmail=smtp.gmail.com:587(TLS)</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+    <button class="btn btn-outline-warning btn-sm" onclick="testEmailSend()"><i class="fas fa-paper-plane me-1"></i>發送測試郵件</button>
+    <button class="btn btn-primary btn-sm" onclick="saveEmail()">保存</button>
+  </div>
+</div></div></div>
+
+<!-- Task Modal -->
+<div class="modal fade" id="taskModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="taskMT">新建定時任務</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><input type="hidden" id="taskId">
+    <div class="row g-2">
+      <div class="col-md-8"><label class="form-label">任務名稱 *</label><input type="text" class="form-control" id="taskName"></div>
+      <div class="col-md-4"><label class="form-label">狀態</label><select class="form-select" id="taskStatus"><option value="active">運行中</option><option value="paused">暫停</option></select></div>
+      <div class="col-md-4"><label class="form-label">觸發方式</label>
+        <select class="form-select" id="taskTrigger" onchange="togTaskTrigger()"><option value="cron">Cron 表達式</option><option value="interval">固定間隔</option></select></div>
+      <div class="col-md-8" id="taskCronWrap">
+        <label class="form-label">Cron 表達式 <small class="text-muted">分 時 日 月 週</small></label>
+        <input type="text" class="form-control ca" id="taskCron" value="0 9 * * *">
+        <div class="cronhelp mt-1"><code>0 9 * * 1-5</code> 週一至五 · <code>*/30 * * * *</code> 每30分鐘 · <code>0 0 * * *</code> 每天凌晨</div>
+      </div>
+      <div class="col-md-8" id="taskIntervalWrap" style="display:none">
+        <label class="form-label">間隔秒數 <small class="text-muted">(最小60秒)</small></label>
+        <input type="number" class="form-control" id="taskInterval" value="3600" min="60"></div>
+      <div class="col-12"><label class="form-label">選擇執行接口</label>
+        <div class="asl" id="taskApiList" style="max-height:200px">加載中...</div></div>
+      <div class="col-12"><label class="form-label">報告名稱模板 <small class="text-muted">({task}=任務名 {time}=時間)</small></label>
+        <input type="text" class="form-control" id="taskRptTpl" value="定時任務-{task}"></div>
+      <div class="col-12">
+        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="taskSendEmail"><label class="form-check-label" for="taskSendEmail">執行完成後發送郵件報告</label></div>
+        <input type="text" class="form-control" id="taskEmailTo" placeholder="收件人，多個用逗號分隔"></div>
+      <div class="col-12"><label class="form-label">描述</label><input type="text" class="form-control" id="taskDesc"></div>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" onclick="saveTask()">保存</button></div>
+</div></div></div>
+
+<!-- Report Detail Modal -->
+<div class="modal fade" id="rptModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="rptMT">測試報告</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body" id="rptBody"><div class="text-center py-4"><div class="spinner-border text-primary"></div></div></div>
+</div></div></div>
+
+<!-- Single Run Modal -->
+<div class="modal fade" id="runModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">單接口執行結果</h5><button class="btn-close bcw" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body" id="runBody"></div>
+</div></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script>
+// ══════════ STATE ══════════
+const S = {apiPg:1, varPg:1, rptPg:1, curCat:'', cats:[], dbs:[], redis:[],
+           lstTaskId:null, lstPollTimer:null};
+const SQL_TPL = {
+  select:'SELECT * FROM table_name LIMIT 10;',
+  count:'SELECT count(*) as total FROM table_name;',
+  delete:'DELETE FROM table_name WHERE id=1;',
+  truncate:'TRUNCATE TABLE table_name;',
+  tables:'SHOW TABLES;',
+  desc:'DESCRIBE table_name;'
+};
+
+// ══════════ UTILS ══════════
+const $ = id => document.getElementById(id);
+function toast(msg, t='success') {
+  const e = document.createElement('div');
+  e.className = 'tm ' + t;
+  const ic = {success:'check-circle', danger:'times-circle', warning:'exclamation-triangle'}[t] || 'info-circle';
+  e.innerHTML = '<i class="fas fa-' + ic + '"></i> ' + msg;
+  $('tc').appendChild(e);
+  setTimeout(() => e.remove(), 3500);
+}
+function load(show, t='執行中...') { $('lov').style.display = show ? 'flex' : 'none'; $('lt').textContent = t; }
+async function R(method, url, body=null) {
+  const o = {method, headers:{'Content-Type':'application/json'}};
+  if (body) o.body = JSON.stringify(body);
+  const res = await fetch(url, o);
+  return res.json();
+}
+let _debTimer = null;
+function debLoad(fn, ms) { clearTimeout(_debTimer); _debTimer = setTimeout(fn, ms); }
+function eh(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return (s||'').replace(/'/g,"\\'"); }
+function jhl(s) {
+  return eh(s)
+    .replace(/"([^"]+)":/g,'<span class="rk">"$1":</span>')
+    .replace(/: "([^"]*)"/g,': <span class="rvs">"$1"</span>')
+    .replace(/: (\d+\.?\d*)/g,': <span class="rvn">$1</span>')
+    .replace(/: (true|false)/g,': <span class="rvb">$1</span>');
+}
+function hl(str) {
+  if (!str) return '<span class="text-muted">(空)</span>';
+  try { return jhl(JSON.stringify(JSON.parse(str), null, 2)); } catch(e) { return eh(str); }
+}
+function pgRender(cid, p, tp, fn) {
+  const e = $(cid); if (!e) return;
+  let h = '';
+  if (p > 1) h += '<li class="page-item"><a class="page-link" onclick="'+fn+'('+(p-1)+')">‹</a></li>';
+  const s = Math.max(1, p-2), ed = Math.min(tp, p+2);
+  if (s > 1) h += '<li class="page-item"><a class="page-link" onclick="'+fn+'(1)">1</a></li>' + (s>2?'<li class="page-item disabled"><a class="page-link">…</a></li>':'');
+  for (let i=s; i<=ed; i++) h += '<li class="page-item '+(i===p?'active':'')+'"><a class="page-link" onclick="'+fn+'('+i+')">'+i+'</a></li>';
+  if (ed < tp) h += (ed<tp-1?'<li class="page-item disabled"><a class="page-link">…</a></li>':'') + '<li class="page-item"><a class="page-link" onclick="'+fn+'('+tp+')">'+tp+'</a></li>';
+  if (p < tp) h += '<li class="page-item"><a class="page-link" onclick="'+fn+'('+(p+1)+')">›</a></li>';
+  e.innerHTML = h;
+}
+
+// ══════════ NAVIGATION ══════════
+function go(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('active'));
+  const pg = $('page-' + name);
+  if (pg) pg.classList.add('active');
+  document.querySelectorAll('.nb[data-page="' + name + '"]').forEach(b => b.classList.add('active'));
+  const map = {
+    dashboard: loadDash,
+    apis: () => { loadCats(); loadApis(); },
+    categories: loadCats,
+    variables: loadVars,
+    databases: loadDbs,
+    redis: loadRedis,
+    redis_tool: loadRdTool,
+    email: loadEmails,
+    scheduler: () => { loadTasks(); loadTaskApis(); },
+    runner: () => { loadCats(); loadRnrApis(); },
+    locust: loadLocustApis,
+    sql_tool: loadSqlDbs,
+    reports: loadRpts
+  };
+  map[name] && map[name]();
+}
+document.querySelectorAll('.nb[data-page]').forEach(b => {
+  b.addEventListener('click', () => go(b.dataset.page));
+});
+
+// ══════════ DASHBOARD ══════════
+async function loadDash() {
+  const [ar, dr, rr, tr, vr, rpr] = await Promise.all([
+    R('GET','/api/apis/?page=1&page_size=1'),
+    R('GET','/api/db/configs/'),
+    R('GET','/api/redis/configs/'),
+    R('GET','/api/scheduler/tasks/'),
+    R('GET','/api/variables/?page=1&page_size=1'),
+    R('GET','/api/reports/?page=1&page_size=5')
+  ]);
+  $('s-api').textContent = ar.data?.total || 0;
+  $('s-db').textContent = dr.data?.length || 0;
+  $('s-redis').textContent = rr.data?.length || 0;
+  $('s-task').textContent = tr.data?.length || 0;
+  $('s-var').textContent = vr.data?.total || 0;
+  $('s-rpt').textContent = rpr.data?.total || 0;
+  const tb = $('dashRpt');
+  if (!rpr.data?.items?.length) { tb.innerHTML='<tr><td colspan="5" class="text-center text-muted py-3">暫無報告</td></tr>'; return; }
+  tb.innerHTML = rpr.data.items.map(r =>
+    '<tr><td>' + r.name + '</td><td><div class="rbar mb-1"><div class="rp" style="width:'+r.pass_rate+'%"></div></div><small>'+r.pass_rate+'%</small></td><td><span class="text-success">'+r.passed+'</span>/<span class="text-danger">'+r.failed+'</span>/<span class="text-warning">'+r.error+'</span></td><td><small class="text-muted">'+r.created_at+'</small></td><td><button class="btn btn-outline-primary" style="font-size:.72rem;padding:2px 7px" onclick="showRpt('+r.id+')">查看</button></td></tr>'
+  ).join('');
+}
+
+// ══════════ CATEGORIES ══════════
+async function loadCats() {
+  const r = await R('GET','/api/categories/');
+  if (r.code !== 0) return;
+  S.cats = r.data || [];
+  // Pills
+  const pills = $('catPills');
+  if (pills) {
+    pills.innerHTML = '<div class="pp' + (!S.curCat?' active':'') + '" onclick="fCat(\'\')">全部</div>' +
+      S.cats.map(c => '<div class="pp' + (S.curCat==c.id?' active':'') + '" onclick="fCat('+c.id+')">' + c.name + ' <span class="badge bg-secondary">'+c.api_count+'</span></div>').join('');
+  }
+  // Category selects
+  ['apiCat','rnrCat'].forEach(sid => {
+    const s = $(sid); if (!s) return;
+    const pf = sid === 'rnrCat' ? '<option value="">全部分類</option>' : '<option value="">未分類</option>';
+    s.innerHTML = pf + S.cats.map(c => '<option value="'+c.id+'">'+c.name+'</option>').join('');
+  });
+  // Task api list cat filter
+  const rc = $('rnrCat');
+  if (rc) rc.innerHTML = '<option value="">全部分類</option>' + S.cats.map(c => '<option value="'+c.id+'">'+c.name+'</option>').join('');
+  // Cat cards page
+  const cc = $('catCards');
+  if (cc) {
+    if (!r.data?.length) { cc.innerHTML='<div class="col-12 text-center text-muted py-4">暫無分類，點擊右上角添加</div>'; return; }
+    cc.innerHTML = r.data.map(c =>
+      '<div class="col-md-4 col-lg-3"><div class="card text-center p-3"><div style="font-size:1.7rem;color:var(--pr)"><i class="fas fa-folder"></i></div><div class="fw-bold mt-2">'+c.name+'</div><div class="text-muted small">'+eh(c.description||'')+'</div><div class="badge bg-primary mt-1">'+c.api_count+' 個接口</div><div class="d-flex justify-content-center gap-2 mt-3"><button class="btn btn-sm btn-outline-primary" onclick="editCat('+c.id+',\''+esc(c.name)+'\',\''+esc(c.description||'')+'\')">編輯</button><button class="btn btn-sm btn-outline-danger" onclick="delCat('+c.id+')">刪除</button></div></div></div>'
+    ).join('');
+  }
+}
+function fCat(id) {
+  S.curCat = id; S.apiPg = 1;
+  document.querySelectorAll('#catPills .pp').forEach(p => {
+    const onclick = p.getAttribute('onclick') || '';
+    p.classList.toggle('active', id ? onclick.includes('('+id+')') : onclick.includes("('')"));
+  });
+  loadApis();
+}
+function openCatModal(id, n, d) {
+  $('catId').value = id || ''; $('catName').value = n || ''; $('catDesc').value = d || '';
+  $('catMT').textContent = id ? '編輯分類' : '添加分類';
+  bootstrap.Modal.getOrCreateInstance($('catModal')).show();
+}
+function editCat(id, n, d) { openCatModal(id, n, d); }
+async function saveCat() {
+  const id = $('catId').value, name = $('catName').value.trim();
+  if (!name) { toast('請填寫名稱','warning'); return; }
+  const r = id ? await R('PUT','/api/categories/'+id+'/',{name, description:$('catDesc').value})
+              : await R('POST','/api/categories/',{name, description:$('catDesc').value});
+  r.code === 0 ? (toast(r.message), bootstrap.Modal.getInstance($('catModal'))?.hide(), loadCats()) : toast(r.message,'danger');
+}
+async function delCat(id) {
+  if (!confirm('確認刪除分類？')) return;
+  const r = await R('DELETE','/api/categories/'+id+'/');
+  r.code === 0 ? (toast('刪除成功'), loadCats()) : toast(r.message,'danger');
+}
+
+// ══════════ APIS ══════════
+async function loadApis(p) {
+  if (p) S.apiPg = p;
+  const kw = $('apiSrc')?.value || '', mth = $('mthF')?.value || '';
+  let url = '/api/apis/?page='+S.apiPg+'&page_size=10&keyword='+encodeURIComponent(kw)+'&method='+mth;
+  if (S.curCat) url += '&category_id=' + S.curCat;
+  const r = await R('GET', url); if (r.code !== 0) return;
+  const {items, total, pages, page:cur} = r.data;
+  const tb = $('apiTb');
+  if (!items.length) { tb.innerHTML='<tr><td colspan="8" class="text-center text-muted py-4">暫無接口</td></tr>'; $('apiTot').textContent='共 0 條'; $('apiPg').innerHTML=''; return; }
+  tb.innerHTML = items.map(a =>
+    '<tr><td><input type="checkbox" class="api-cb form-check-input" value="'+a.id+'"></td>' +
+    '<td><strong>'+eh(a.name)+'</strong></td>' +
+    '<td><span class="badge bg-light text-secondary">'+eh(a.category_name)+'</span></td>' +
+    '<td><span class="bm '+a.method.toLowerCase()+'">'+a.method+'</span></td>' +
+    '<td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eh(a.url)+'">'+eh(a.url)+'</td>' +
+    '<td>'+(a.encrypted?'<span class="badge bg-warning text-dark"><i class="fas fa-lock"></i></span>':'')+' '+(a.use_async?'<span class="at2">async</span>':'')+' '+(a.use_session?'<span class="badge bg-info">session</span>':'')+'</td>' +
+    '<td class="text-muted small">'+a.updated_at+'</td>' +
+    '<td>' +
+    '<button class="btn bi btn-outline-success btn-sm me-1" onclick="run1('+a.id+')" title="執行"><i class="fas fa-play fa-xs"></i></button>' +
+    '<button class="btn bi btn-outline-primary btn-sm me-1" onclick="editApi('+a.id+')" title="編輯"><i class="fas fa-edit fa-xs"></i></button>' +
+    '<button class="btn bi btn-outline-danger btn-sm" onclick="delApi('+a.id+')" title="刪除"><i class="fas fa-trash fa-xs"></i></button>' +
+    '</td></tr>'
+  ).join('');
+  $('apiTot').textContent = '共 ' + total + ' 條';
+  pgRender('apiPg', cur, pages, 'loadApis');
+  $('selAll').checked = false;
+}
+function togSelAll(cb) { document.querySelectorAll('.api-cb').forEach(c => c.checked = cb.checked); }
+function getSelIds() { return [...document.querySelectorAll('.api-cb:checked')].map(c => +c.value); }
+async function runSel() {
+  const ids = getSelIds(); if (!ids.length) { toast('請先選擇接口','warning'); return; }
+  S.rnrSel = new Set(ids); go('runner'); await loadRnrApis(); updRnrBadges();
+}
+async function delSel() {
+  const ids = getSelIds(); if (!ids.length) { toast('請先選擇','warning'); return; }
+  if (!confirm('確認刪除 '+ids.length+' 個接口？')) return;
+  await Promise.all(ids.map(id => R('DELETE','/api/apis/'+id+'/')));
+  toast('已刪除 '+ids.length+' 個'); loadApis();
+}
+async function delApi(id) {
+  if (!confirm('確認刪除？')) return;
+  const r = await R('DELETE','/api/apis/'+id+'/');
+  r.code === 0 ? (toast('刪除成功'), loadApis()) : toast(r.message,'danger');
+}
+
+// ══════════ API MODAL ══════════
+function fillDbSelects() {
+  const dbOpts = '<option value="">不使用</option>' + S.dbs.map(d => '<option value="'+d.id+'">'+d.name+'</option>').join('');
+  ['apiPreDb','apiPostDb'].forEach(sid => { const s=$(sid); if(s) s.innerHTML = dbOpts; });
+}
+function openApiModal() {
+  clearApiForm(); $('apiMT').textContent='添加接口';
+  fillCatSelApi(); fillDbSelects();
+  bootstrap.Modal.getOrCreateInstance($('apiModal')).show();
+}
+function clearApiForm() {
+  ['apiId','apiName','apiUrl','apiDesc','apiHdr','apiPrm','apiBdy','apiEncKey','apiPreSql','apiPostSql'].forEach(id => { const e=$(id); if(e) e.value=''; });
+  $('apiMth').value='POST'; $('apiBodyType').value='json'; $('apiCat').value='';
+  $('apiSort').value='0'; $('apiTimeout').value='30';
+  $('apiAsync').checked=false; $('apiSession').checked=false; $('apiEnc').checked=false;
+  $('apiEncAlgo').value=''; $('apiEncKey').value='';
+  $('globalEncSec').style.display='none'; $('fieldEncSec').style.display='none';
+  $('encRules').innerHTML='';
+  $('exRules').innerHTML=''; $('asRules').innerHTML='';
+  $('ddRules').innerHTML=''; $('daRules').innerHTML=''; $('apiPreDb').value=''; $('apiPostDb').value='';
+  $('preRedisRules').innerHTML='';
+  togApiBody(); updBodyTypeHint();
+}
+function fillCatSelApi() {
+  const s = $('apiCat'); if (!s) return;
+  const cur = s.value;
+  s.innerHTML = '<option value="">未分類</option>' + S.cats.map(c => '<option value="'+c.id+'"'+(c.id==cur?' selected':'')+'>'+c.name+'</option>').join('');
+}
+async function editApi(id) {
+  clearApiForm();
+  const r = await R('GET','/api/apis/'+id+'/'); if (r.code !== 0) { toast(r.message,'danger'); return; }
+  const a = r.data;
+
+  // ① 先填充下拉選項（必須在設置 .value 之前，否則不存在的選項值會被瀏覽器重置為 ''）
+  fillCatSelApi(); fillDbSelects();
+
+  // ② 再設置各字段值
+  $('apiId').value=a.id; $('apiName').value=a.name; $('apiUrl').value=a.url;
+  $('apiMth').value=a.method; $('apiBodyType').value=a.body_type||'json';
+  $('apiCat').value=a.category_id||'';           // 分類（options 已存在，value 能正確選中）
+  $('apiSort').value=a.sort_order; $('apiTimeout').value=a.timeout||30;
+  $('apiDesc').value=a.description;
+  $('apiHdr').value=a.headers||'{}';
+  $('apiPrm').value=a.params||'{}';
+  $('apiBdy').value=a.body||'{}';
+  $('apiAsync').checked=a.use_async; $('apiSession').checked=a.use_session;
+  $('apiEnc').checked=a.encrypted;
+  $('apiEncAlgo').value=a.encryption_algorithm||'';
+  $('apiEncKey').value=a.encryption_key||'';
+  togEncMode();
+  $('apiPreSql').value=a.pre_sql||''; $('apiPostSql').value=a.post_sql||'';
+  if (a.pre_sql_db_id) $('apiPreDb').value=a.pre_sql_db_id;
+  if (a.post_sql_db_id) $('apiPostDb').value=a.post_sql_db_id;
+
+  // ③ 動態規則
+  try { JSON.parse(a.extract_vars||'[]').forEach(x => addEx(x.name, x.path)); } catch(e){}
+  try { JSON.parse(a.assertions||'[]').forEach(x => addAs(x.type, x.expected, x.path)); } catch(e){}
+  try { JSON.parse(a.deepdiff_assertions||'[]').forEach(x => addDD(x.label, x.expected, x.ignore_fields?.join(','), x.check_path)); } catch(e){}
+  try { JSON.parse(a.db_assertions||'[]').forEach(x => addDa(x)); } catch(e){}
+  try { JSON.parse(a.body_enc_rules||'[]').forEach(x => addEncRule(x)); } catch(e){}
+  try { JSON.parse(a.pre_redis_rules||'[]').forEach(x => addPreRedis(x)); } catch(e){}
+
+  // ④ 最後更新 UI 狀態後開啟 Modal
+  $('apiMT').textContent='編輯接口'; togApiBody(); updBodyTypeHint();
+  bootstrap.Modal.getOrCreateInstance($('apiModal')).show();
+}
+function togApiBody() {
+  const isPost = ['POST','PUT','PATCH','DELETE'].includes($('apiMth').value);
+  $('tBli').style.display = isPost ? '' : 'none';
+  $('ctWrap').style.display = isPost ? '' : 'none';
+}
+function updBodyTypeHint() {
+  const bt = $('apiBodyType')?.value || 'json';
+  const hints = {
+    json:   'JSON → requests.post(url, json=body) │ 加密模式：包裝成 {"encrypted":"..."}',
+    data:   '✅ Data → requests.post(url, data=body) │ 原始字符串/dict │ 加密後直接 data=encrypted_str 發送',
+    params: 'Params → requests.post(url, params=body) │ Body 內容追加到 URL query string',
+    form:   'Form → requests.post(url, data=body) │ form-urlencoded 格式',
+    raw:    '✅ Raw → requests.post(url, data=str) │ json.dumps 後發送 │ 加密後直接 data=encrypted_str',
+    text:   '✅ Text/Plain → requests.post(url, data=str, headers={"Content-Type":"text/plain"}) │ 加密後直接 data=encrypted_str',
+    files:  'Files → requests.post(url, files=...) │ 用 __files__ 字段指定文件'
+  };
+  const hint = $('bodyTypeHint');
+  const tpg  = $('textPlainGuide');
+  const fh   = $('filesHint');
+  const ta   = $('apiBdy');
+  const isRaw = bt === 'text' || bt === 'data';
+
+  if (hint) {
+    hint.style.display = isRaw ? 'none' : '';
+    if (!isRaw) hint.textContent = hints[bt] || '';
+  }
+  if (tpg) {
+    tpg.style.display = isRaw ? '' : 'none';
+    // Update guide text based on mode
+    const tpgTitle = tpg.querySelector('strong');
+    if (tpgTitle) {
+      if (bt === 'text') tpgTitle.innerHTML = '✅ Text/Plain 模式（<code>data=raw_string</code>）：';
+      else if (bt === 'data') tpgTitle.innerHTML = '✅ Data 模式（<code>data=body</code>）：';
+    }
+  }
+  if (fh)  fh.style.display  = bt === 'files' ? '' : 'none';
+  if (ta) {
+    const placeholders = {
+      json:   '{"username":"{{user}}","password":"{{pass}}"}',
+      data:   '{"key":"value"}\n或原始字符串：10,5,20,1,33,4',
+      params: '{"page":"1","size":"10","keyword":"{{search}}"}',
+      form:   '{"username":"{{user}}","password":"{{pass}}"}',
+      raw:    '{"key":"value"} 或任意字符串',
+      text:   '10,5,20,1,33,4\n（直接填要發送的內容）',
+      files:  '{"__files__":[{"field":"file","path":"/tmp/a.jpg"}],"extra_field":"val"}'
+    };
+    ta.placeholder = placeholders[bt] || '';
+  }
+}
+function togEncMode() {
+  const algo = $('apiEncAlgo')?.value || '';
+  // 所有算法都顯示整體加密選項
+  $('globalEncSec').style.display = algo ? '' : 'none';
+  // 字段級加密只對 AES-GCM 顯示
+  $('fieldEncSec').style.display  = algo === 'AES-GCM' ? '' : 'none';
+  if (!algo) $('apiEnc').checked = false;
+}
+function togEnc() { togEncMode(); }
+
+// ══════════ 前置 Redis 取值 ══════════
+function addPreRedis(rule) {
+  const redisId      = rule?.redis_id      || '';
+  const key          = rule?.key           || '';
+  const varName      = rule?.var_name      || '';
+  const extractField = rule?.extract_field || '';
+
+  // Build Redis select options from S.redis
+  const redisOpts = (S.redis||[]).map(r =>
+    '<option value="'+r.id+'"'+(r.id==redisId?' selected':'')+'>'+eh(r.name)+'</option>'
+  ).join('');
+
+  const d = document.createElement('div');
+  d.className = 'card mb-2 p-2 pre-redis-rule';
+  d.innerHTML =
+    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+      '<span class="badge bg-danger">Redis 取值</span>' +
+      '<button class="btn btn-xs btn-outline-danger btn-sm py-0" onclick="this.closest(\'.pre-redis-rule\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '</div>' +
+    '<div class="row g-2">' +
+      '<div class="col-md-4">' +
+        '<label class="form-label" style="font-size:.75rem">Redis 連接</label>' +
+        '<select class="form-select form-select-sm rr-redis"><option value="">請選擇</option>' + redisOpts + '</select>' +
+      '</div>' +
+      '<div class="col-md-8">' +
+        '<label class="form-label" style="font-size:.75rem">Key（支持 <code>{{變量名}}</code>）</label>' +
+        '<input type="text" class="form-control form-control-sm ca rr-key" value="'+eh(key)+'" placeholder="sms:{{mobile}} 或 captcha:{{session_id}}">' +
+      '</div>' +
+      '<div class="col-md-5">' +
+        '<label class="form-label" style="font-size:.75rem">存入變量名 <code>{{captcha}}</code></label>' +
+        '<input type="text" class="form-control form-control-sm ca rr-var" value="'+eh(varName)+'" placeholder="captcha">' +
+      '</div>' +
+      '<div class="col-md-7">' +
+        '<label class="form-label" style="font-size:.75rem">提取字段（值為 JSON 時用，如 <code>code</code>，留空取整個值）</label>' +
+        '<input type="text" class="form-control form-control-sm ca rr-field" value="'+eh(extractField)+'" placeholder="code（留空則取整個 value）">' +
+      '</div>' +
+    '</div>';
+  $('preRedisRules').appendChild(d);
+}
+
+function addEncRule(rule) {
+  const field   = rule?.field     || '';
+  const ssrc    = rule?.ssrc      || '';
+  const raw     = rule?.raw       || '';
+  const dumps   = rule?.json_dumps || false;
+  const d = document.createElement('div'); d.className='enc-rule mb-2 p-2 border rounded';
+  d.innerHTML =
+    '<button class="btn bi btn-outline-danger btn-sm float-end" onclick="this.closest(\'.enc-rule\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '<div class="row g-1">' +
+    '<div class="col-md-3"><label class="form-label" style="font-size:.74rem">目標字段 field</label><input type="text" class="form-control form-control-sm ca er-field" value="'+eh(field)+'" placeholder="param"></div>' +
+    '<div class="col-md-5"><label class="form-label" style="font-size:.74rem">ssrc 要加密的值 <small class="text-muted">（支持{{變量名}}）</small></label><input type="text" class="form-control form-control-sm ca er-ssrc" value="'+eh(ssrc)+'" placeholder="{{payload}} 或 user/loginAndRegister"></div>' +
+    '<div class="col-md-4"><label class="form-label" style="font-size:.74rem">raw 密鑰（留空用全局）</label><input type="text" class="form-control form-control-sm ca er-raw" value="'+eh(raw)+'" placeholder="DLMwO2OmfYnEfo7s"></div>' +
+    '<div class="col-12 mt-1"><div class="form-check form-check-inline"><input class="form-check-input er-dumps" type="checkbox"'+(dumps?' checked':'')+'><label class="form-check-label small">json_dumps（先對 ssrc 的值 json.dumps 再加密）</label></div></div>' +
+    '</div>';
+  $('encRules').appendChild(d);
+}
+
+// Rule builders
+function addEx(n='', p='') {
+  const d = document.createElement('div'); d.className='er';
+  d.innerHTML = '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.er\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '<div class="row g-1"><div class="col-md-5"><label class="form-label">變量名</label><input type="text" class="form-control ex-n" value="'+eh(n)+'" placeholder="token"></div>' +
+    '<div class="col-md-7"><label class="form-label">JSON路徑</label><input type="text" class="form-control ex-p" value="'+eh(p)+'" placeholder="data.token"></div></div>';
+  $('exRules').appendChild(d);
+}
+function addAs(type='status_code', exp='200', path='') {
+  const d = document.createElement('div'); d.className='ar';
+  const needPath = type==='json_path'||type==='not_empty'||type==='regex';
+  const noExp = type==='not_empty';
+  d.innerHTML = '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.ar\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '<div class="row g-1"><div class="col-md-4"><label class="form-label">類型</label><select class="form-select as-t" onchange="updAs(this)">' +
+    ['status_code','json_path','contains','not_empty','regex'].map(o => '<option value="'+o+'"'+(o===type?' selected':'')+'>'+{status_code:'狀態碼',json_path:'JSON路徑',contains:'包含文本',not_empty:'不為空',regex:'正則匹配'}[o]+'</option>').join('') +
+    '</select></div>' +
+    '<div class="col-md-4 as-pw" style="'+(needPath?'':'display:none')+'"><label class="form-label">JSON路徑</label><input type="text" class="form-control as-p" value="'+eh(path)+'" placeholder="data.code"></div>' +
+    '<div class="col-md-4 as-ew" style="'+(noExp?'display:none':'')+'"><label class="form-label">期望值</label><input type="text" class="form-control as-e" value="'+eh(exp)+'" placeholder="200"></div></div>';
+  $('asRules').appendChild(d);
+}
+function updAs(sel) {
+  const r=sel.closest('.ar'), t=sel.value;
+  r.querySelector('.as-pw').style.display = (t==='json_path'||t==='not_empty'||t==='regex') ? '' : 'none';
+  r.querySelector('.as-ew').style.display = t==='not_empty' ? 'none' : '';
+}
+function addDD(label='響應體對比', exp='{}', ignores='', cp='') {
+  const d = document.createElement('div'); d.className='ddr';
+  d.innerHTML = '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.ddr\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '<div class="row g-1">' +
+    '<div class="col-md-4"><label class="form-label">標籤</label><input type="text" class="form-control dd-label" value="'+eh(label)+'" placeholder="響應體對比"></div>' +
+    '<div class="col-md-4"><label class="form-label">JSON路徑（選填）</label><input type="text" class="form-control dd-cp" value="'+eh(cp)+'" placeholder="data.result"></div>' +
+    '<div class="col-md-4"><label class="form-label">忽略字段（逗號分隔）</label><input type="text" class="form-control dd-ign" value="'+eh(ignores)+'" placeholder="id,created_at,timestamp"></div>' +
+    '<div class="col-12"><label class="form-label">期望值（JSON）</label><textarea class="form-control ca dd-exp" rows="3" placeholder=\'{"code":0,"data":{"name":"test"}}\'>' + eh(typeof exp==='string'?exp:JSON.stringify(exp,null,2)) + '</textarea></div></div>';
+  $('ddRules').appendChild(d);
+}
+function addDa(rule) {
+  // rule 可以是舊格式 {db_id,sql,field,operator,expected,label} 或新格式 {db_id,sql,fields:[...],label}
+  const dbid    = rule?.db_id   || '';
+  const sql     = rule?.sql     || '';
+  const label   = rule?.label   || '';
+  const dbOpts  = S.dbs.map(db => '<option value="'+db.id+'"'+(db.id==dbid?' selected':'')+'>'+db.name+'</option>').join('');
+
+  // 兼容舊格式：fields 數組
+  let fields = [];
+  if (rule?.fields && Array.isArray(rule.fields)) {
+    fields = rule.fields;
+  } else if (rule?.field !== undefined) {
+    // 舊格式
+    fields = [{field: rule.field||'', operator: rule.operator||'==', expected: rule.expected||''}];
+  } else {
+    fields = [{field:'', operator:'==', expected:''}];
+  }
+
+  const d = document.createElement('div'); d.className='dr mb-2';
+  d.innerHTML =
+    '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.dr\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
+    '<div class="row g-1 mb-1">' +
+    '<div class="col-md-5"><label class="form-label">數據庫 <span class="dt">DB</span></label><select class="form-select da-db"><option value="">請選擇</option>'+dbOpts+'</select></div>' +
+    '<div class="col-md-7"><label class="form-label">描述標籤（可選）</label><input type="text" class="form-control da-label" value="'+eh(label)+'" placeholder="如：驗證用戶狀態"></div>' +
+    '<div class="col-12"><label class="form-label">SQL（SELECT語句，支持{{變量}}）</label><input type="text" class="form-control ca da-sql" value="'+eh(sql)+'" placeholder="SELECT name, status, age FROM users WHERE id={{user_id}}"></div>' +
+    '</div>' +
+    '<div class="da-fields-wrap">' +
+    fields.map((f,i) => buildDaField(f.field||'', f.operator||'==', f.expected||'', i===0)).join('') +
+    '</div>' +
+    '<button class="btn btn-xs btn-outline-secondary mt-1" style="font-size:.73rem;padding:2px 8px" onclick="addDaField(this)"><i class="fas fa-plus me-1"></i>添加字段斷言</button>';
+
+  $('daRules').appendChild(d);
+}
+
+function buildDaField(field, op, exp, isFirst) {
+  const ops = ['==','!=','>','<','>=','<=','contains','not_empty'];
+  return '<div class="da-field-row d-flex gap-1 align-items-end mt-1">' +
+    '<div style="flex:2"><label class="form-label" style="font-size:.72rem">字段名</label><input type="text" class="form-control form-control-sm ca da-field-name" value="'+eh(field)+'" placeholder="cnt / name / status"></div>' +
+    '<div style="flex:2"><label class="form-label" style="font-size:.72rem">比較符</label><select class="form-select form-select-sm da-field-op">'+ops.map(o=>'<option'+(o===op?' selected':'')+'>'+o+'</option>').join('')+'</select></div>' +
+    '<div style="flex:3"><label class="form-label" style="font-size:.72rem">期望值</label><input type="text" class="form-control form-control-sm da-field-exp" value="'+eh(exp)+'" placeholder="1"></div>' +
+    '<div style="padding-bottom:2px">'+(isFirst?'<span style="display:inline-block;width:28px"></span>':'<button class="btn bi btn-outline-danger btn-sm" onclick="this.closest(\'.da-field-row\').remove()"><i class="fas fa-times fa-xs"></i></button>')+'</div>' +
+    '</div>';
+}
+
+function addDaField(btn) {
+  const wrap = btn.previousElementSibling;
+  wrap.insertAdjacentHTML('beforeend', buildDaField('','==','',false));
+}
+
+function tryJSON(val, fieldName) {
+  if (!val || val.trim() === '') return '{}';
+  try { JSON.parse(val); return val; }
+  catch(e) {
+    toast(fieldName + ' 不是合法 JSON，已自動清空（原值：' + val.substring(0,30) + '...）', 'warning');
+    return '{}';
+  }
+}
+
+function colApiData() {
+  const exRules = [...$('exRules').querySelectorAll('.er')].map(r=>({name:r.querySelector('.ex-n').value.trim(),path:r.querySelector('.ex-p').value.trim()})).filter(r=>r.name&&r.path);
+  const asRules = [...$('asRules').querySelectorAll('.ar')].map(r=>({type:r.querySelector('.as-t').value,expected:r.querySelector('.as-e')?.value||'',path:r.querySelector('.as-p')?.value||''}));
+  const ddRules = [...$('ddRules').querySelectorAll('.ddr')].map(r=>({
+    label:r.querySelector('.dd-label').value.trim(),
+    expected:r.querySelector('.dd-exp').value.trim(),
+    ignore_fields:(r.querySelector('.dd-ign').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+    check_path:r.querySelector('.dd-cp').value.trim()
+  })).filter(r=>r.label);
+
+  // DB assertions — multi-field format
+  const daRules = [...$('daRules').querySelectorAll('.dr')].map(r => {
+    const db_id = r.querySelector('.da-db').value;
+    const sql   = r.querySelector('.da-sql').value.trim();
+    const label = r.querySelector('.da-label')?.value.trim() || '';
+    const fieldRows = [...r.querySelectorAll('.da-field-row')].map(fr=>({
+      field:    fr.querySelector('.da-field-name').value.trim(),
+      operator: fr.querySelector('.da-field-op').value,
+      expected: fr.querySelector('.da-field-exp').value.trim()
+    })).filter(fr=>fr.field||fr.expected);
+    return {db_id, sql, label, fields: fieldRows};
+  }).filter(r=>r.db_id&&r.sql);
+
+  // Body field-level AES-GCM enc rules
+  const encRules = [...$('encRules').querySelectorAll('.enc-rule')].map(r=>({
+    field:      r.querySelector('.er-field').value.trim(),
+    ssrc:       r.querySelector('.er-ssrc').value.trim(),
+    raw:        r.querySelector('.er-raw').value.trim(),
+    json_dumps: r.querySelector('.er-dumps').checked
+  })).filter(r=>r.field&&r.ssrc);
+
+  const algo = $('apiEncAlgo')?.value || '';
+  return {
+    name:$('apiName').value.trim(), url:$('apiUrl').value.trim(),
+    method:$('apiMth').value, body_type:$('apiBodyType').value,
+    category_id:$('apiCat').value||null, sort_order:+$('apiSort').value||0,
+    timeout:+$('apiTimeout').value||30, description:$('apiDesc').value,
+    headers: tryJSON($('apiHdr').value, 'Headers'),
+    params:  tryJSON($('apiPrm').value, 'Params'),
+    body:    $('apiBdy').value || '{}',
+    use_async:$('apiAsync').checked, use_session:$('apiSession').checked,
+    encrypted:$('apiEnc').checked,
+    encryption_key:$('apiEncKey').value,
+    encryption_algorithm: algo || 'AES',
+    body_enc_rules: JSON.stringify(encRules),
+    extract_vars:JSON.stringify(exRules),
+    assertions:JSON.stringify(asRules),
+    deepdiff_assertions:JSON.stringify(ddRules),
+    db_assertions:JSON.stringify(daRules),
+    pre_sql_db_id:$('apiPreDb').value||null, pre_sql:$('apiPreSql').value,
+    post_sql_db_id:$('apiPostDb').value||null, post_sql:$('apiPostSql').value,
+    pre_redis_rules: JSON.stringify([...$('preRedisRules').querySelectorAll('.pre-redis-rule')].map(r=>({
+      redis_id: +r.querySelector('.rr-redis').value,
+      key:      r.querySelector('.rr-key').value.trim(),
+      var_name: r.querySelector('.rr-var').value.trim(),
+      extract_field: r.querySelector('.rr-field').value.trim()
+    })).filter(r=>r.redis_id&&r.key&&r.var_name))
+  };
+}
+async function saveApi() {
+  const data = colApiData();
+  if (!data.name || !data.url) { toast('請填寫名稱和URL','warning'); return; }
+  const id = $('apiId').value;
+  const r = id ? await R('PUT','/api/apis/'+id+'/',data) : await R('POST','/api/apis/',data);
+  if (r.code === 0) {
+    toast(r.message);
+    bootstrap.Modal.getOrCreateInstance($('apiModal')).hide();
+    loadApis();
+  } else {
+    toast(r.message, 'danger');
+  }
+}
+async function saveRunApi() {
+  const data = colApiData();
+  if (!data.name || !data.url) { toast('請填寫名稱和URL','warning'); return; }
+  const id = $('apiId').value;
+  let r = id ? await R('PUT','/api/apis/'+id+'/',data) : await R('POST','/api/apis/',data);
+  if (r.code !== 0) { toast(r.message,'danger'); return; }
+  bootstrap.Modal.getOrCreateInstance($('apiModal')).hide(); loadApis();
+  run1(r.data.id);
+}
+async function run1(id) {
+  load(true,'執行接口...');
+  const r = await R('POST','/api/apis/'+id+'/run/',{});
+  load(false); showRun(r.data);
+}
+function showRun(data) {
+  if (!data) { toast('執行失敗','danger'); return; }
+  const sc = data.status==='pass'?'success':data.status==='fail'?'danger':'warning';
+  const hc = data.response_status>=200&&data.response_status<300?'success':'danger';
+  let h = '<div class="d-flex gap-2 mb-3 flex-wrap align-items-center">' +
+    '<span class="badge bg-'+sc+' fs-6 px-3 py-2">'+(data.status==='pass'?'✓ 通過':data.status==='fail'?'✗ 失敗':'⚠ 錯誤')+'</span>' +
+    '<span class="badge bg-'+hc+'">HTTP '+data.response_status+'</span>' +
+    '<span class="badge bg-secondary">'+data.response_time+'ms</span>' +
+    (data.use_async?'<span class="at2">httpx async</span>':'') +
+    (data.use_session?'<span class="badge bg-info">Session</span>':'') + '</div>';
+  if (data.enc_applied?.length) {
+    h += '<div class="mb-2"><strong>字段加密 <span class="badge bg-danger">AES-GCM</span>：</strong> ' +
+      data.enc_applied.map(r=>'<code>'+eh(r.field)+'</code>').join(' · ') + '</div>';
+  }
+  if (data.encrypted_body) {
+    h += '<div class="mb-2"><strong>全局加密：</strong><code class="small">'+eh(data.encrypted_body.substring(0,60))+'...</code></div>';
+  }
+  if (data.error_message) h += '<div class="alert alert-danger py-2 small">'+eh(data.error_message)+'</div>';
+  if (data.assertion_results?.length) {
+    h += '<div class="mb-2"><strong>HTTP 斷言：</strong><br>' +
+      data.assertion_results.map(a=>'<span class="badge bg-'+(a.passed?'success':'danger')+' d-inline-block me-1 mb-1">'+eh(a.passed?'✓':'✗')+' '+eh(a.message||'')+'</span>').join('') + '</div>';
+  }
+  if (data.deepdiff_results?.length) {
+    h += '<div class="mb-2"><strong>DeepDiff 斷言 <span class="dt">DD</span>：</strong><br>' +
+      data.deepdiff_results.map(a=>'<div class="badge bg-'+(a.passed?'success':'danger')+' d-block text-start mb-1">'+eh(a.message||'')+'</div>').join('') + '</div>';
+  }
+  if (data.db_assertion_results?.length) {
+    h += '<div class="mb-2"><strong>DB 斷言 <span class="dt">DB</span>：</strong><br>' +
+      data.db_assertion_results.map(a => {
+        const main = '<span class="badge bg-'+(a.passed?'success':'danger')+' d-block text-start mb-1">'+eh(a.passed?'✓':'✗')+' '+eh(a.message||'')+'</span>';
+        const subs = (a.field_results||[]).length > 1
+          ? '<div class="ms-3">' + a.field_results.map(f=>'<span class="badge bg-'+(f.passed?'success':'danger')+' d-inline-block me-1 mb-1 text-start">'+eh(f.message||'')+'</span>').join('') + '</div>'
+          : '';
+        return main + subs;
+      }).join('') + '</div>';
+  }
+  if (data.pre_redis_log?.length) {
+    h += '<div class="mb-2"><strong>前置 Redis <span class="badge bg-danger" style="font-size:.65rem">RD</span>：</strong><br>' +
+      data.pre_redis_log.map(r =>
+        '<span class="badge bg-'+(r.success?'success':'danger')+' d-inline-block me-1 mb-1">' +
+        eh(r.success ? '✓ '+r.key+' → {{'+r.var_name+'}}='+r.value : '✗ '+r.key+': '+(r.error||'')) +
+        '</span>'
+      ).join('') + '</div>';
+  }
+  if (data.pre_sql_result) h += '<div class="mb-2"><strong>前置SQL：</strong><div class="sqr mt-1" style="max-height:80px">'+eh(data.pre_sql_result)+'</div></div>';
+  if (data.post_sql_result) h += '<div class="mb-2"><strong>後置SQL：</strong><div class="sqr mt-1" style="max-height:80px">'+eh(data.post_sql_result)+'</div></div>';
+  if (data.extracted_vars && Object.keys(data.extracted_vars).length) {
+    h += '<div class="mb-2"><strong>提取變量：</strong>' +
+      Object.entries(data.extracted_vars).map(([k,v])=>'<code>'+k+'</code>=<span class="text-success">'+eh(String(v))+'</span> ').join('') + '</div>';
+  }
+  h += '<div><strong>響應體：</strong><div class="rb mt-1">'+hl(data.response_body)+'</div></div>';
+  $('runBody').innerHTML = h;
+  bootstrap.Modal.getOrCreateInstance($('runModal')).show();
+}
+
+// ══════════ VARIABLES ══════════
+async function loadVars(p) {
+  if (p) S.varPg = p;
+  const r = await R('GET','/api/variables/?page='+S.varPg+'&page_size=10');
+  if (r.code !== 0) return;
+  const {items, total, pages, page:cur} = r.data;
+  const tc = {string:'secondary',token:'warning',json:'info'};
+  $('varTb').innerHTML = items.length ? items.map(v =>
+    '<tr><td><code>'+eh(v.name)+'</code></td>' +
+    '<td><span class="badge bg-'+(tc[v.var_type]||'secondary')+' text-dark">'+v.var_type+'</span></td>' +
+    '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eh(v.value)+'">'+eh(v.value)+'</td>' +
+    '<td class="text-muted small">'+eh(v.description||'-')+'</td>' +
+    '<td class="text-muted small">'+v.updated_at+'</td>' +
+    '<td><button class="btn bi btn-outline-primary btn-sm me-1" onclick="editVar('+v.id+')"><i class="fas fa-edit fa-xs"></i></button>' +
+    '<button class="btn bi btn-outline-danger btn-sm" onclick="delVar('+v.id+')"><i class="fas fa-trash fa-xs"></i></button></td></tr>'
+  ).join('') : '<tr><td colspan="6" class="text-center text-muted py-4">暫無變量</td></tr>';
+  $('varTot').textContent = '共 ' + total + ' 條';
+  pgRender('varPg', cur, pages, 'loadVars');
+}
+function openVarModal() {
+  ['varId','varName','varVal','varDesc'].forEach(id => { const e=$(id); if(e) e.value=''; });
+  $('varType').value='string'; $('varMT').textContent='添加變量';
+  bootstrap.Modal.getOrCreateInstance($('varModal')).show();
+}
+async function editVar(id) {
+  const r = await R('GET','/api/variables/'+id+'/'); if (r.code !== 0) return;
+  const v = r.data;
+  $('varId').value=v.id; $('varName').value=v.name; $('varType').value=v.var_type;
+  $('varVal').value=v.value; $('varDesc').value=v.description;
+  $('varMT').textContent='編輯變量'; bootstrap.Modal.getOrCreateInstance($('varModal')).show();
+}
+async function saveVar() {
+  const id = $('varId').value;
+  const body = {name:$('varName').value.trim(),value:$('varVal').value,var_type:$('varType').value,description:$('varDesc').value};
+  if (!body.name) { toast('請填寫變量名','warning'); return; }
+  const r = id ? await R('PUT','/api/variables/'+id+'/',body) : await R('POST','/api/variables/',body);
+  r.code===0 ? (toast(r.message), bootstrap.Modal.getInstance($('varModal'))?.hide(), loadVars()) : toast(r.message,'danger');
+}
+async function delVar(id) {
+  if (!confirm('確認刪除？')) return;
+  const r = await R('DELETE','/api/variables/'+id+'/');
+  r.code===0 ? (toast('刪除成功'), loadVars()) : toast(r.message,'danger');
+}
+function openTokModal() {
+  $('tokVar').value='token'; $('tokType').value='uuid'; $('tokCustom').style.display='none';
+  bootstrap.Modal.getOrCreateInstance($('tokModal')).show();
+}
+function togTokCustom() { $('tokCustom').style.display = $('tokType').value==='custom' ? '' : 'none'; }
+async function genToken() {
+  const r = await R('POST','/api/variables/token/generate/',{type:$('tokType').value,var_name:$('tokVar').value.trim(),value:$('tokCustomVal')?.value||''});
+  r.code===0 ? (toast('Token 已生成並保存'), bootstrap.Modal.getInstance($('tokModal'))?.hide(), loadVars()) : toast(r.message,'danger');
+}
+
+// ══════════ DATABASES ══════════
+async function loadDbs() {
+  const r = await R('GET','/api/db/configs/'); if (r.code !== 0) return;
+  S.dbs = r.data || [];
+  const cc = $('dbCards'); if (!cc) return;
+  if (!r.data?.length) { cc.innerHTML='<div class="col-12 text-center text-muted py-4">暫無MySQL配置，點擊右上角添加</div>'; return; }
+  cc.innerHTML = r.data.map(d =>
+    '<div class="col-md-6 col-lg-4"><div class="card p-3">' +
+    '<div class="d-flex align-items-center gap-2 mb-2"><div style="font-size:1.6rem;color:#1d4ed8"><i class="fas fa-database"></i></div><div><div class="fw-bold">'+eh(d.name)+'</div><div class="text-muted small">'+d.host+':'+d.port+'/'+d.database+'</div></div></div>' +
+    (d.description?'<div class="text-muted small mb-2">'+eh(d.description)+'</div>':'') +
+    '<div class="d-flex gap-1"><button class="btn btn-sm btn-outline-success flex-fill" onclick="testDb('+d.id+')"><i class="fas fa-plug me-1"></i>測試</button><button class="btn btn-sm btn-outline-primary" onclick="editDb('+d.id+')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="delDb('+d.id+')"><i class="fas fa-trash"></i></button></div>' +
+    '</div></div>'
+  ).join('');
+}
+function openDbModal() {
+  ['dbId','dbName','dbUser','dbPwd','dbDb','dbDesc'].forEach(id=>{const e=$(id);if(e)e.value='';});
+  $('dbHost').value='127.0.0.1'; $('dbPort').value='3306'; $('dbCharset').value='utf8mb4';
+  $('dbMT').textContent='添加MySQL配置'; bootstrap.Modal.getOrCreateInstance($('dbModal')).show();
+}
+async function editDb(id) {
+  const r = await R('GET','/api/db/configs/'+id+'/'); if (r.code !== 0) return;
+  const d = r.data;
+  $('dbId').value=d.id; $('dbName').value=d.name; $('dbHost').value=d.host; $('dbPort').value=d.port;
+  $('dbUser').value=d.username; $('dbPwd').value=''; $('dbDb').value=d.database;
+  $('dbCharset').value=d.charset; $('dbDesc').value=d.description;
+  $('dbMT').textContent='編輯MySQL配置'; bootstrap.Modal.getOrCreateInstance($('dbModal')).show();
+}
+async function saveDb() {
+  const id = $('dbId').value;
+  const body = {name:$('dbName').value.trim(),host:$('dbHost').value,port:+$('dbPort').value,username:$('dbUser').value,password:$('dbPwd').value,database:$('dbDb').value,charset:$('dbCharset').value,description:$('dbDesc').value};
+  if (!body.name) { toast('請填寫名稱','warning'); return; }
+  const r = id ? await R('PUT','/api/db/configs/'+id+'/',body) : await R('POST','/api/db/configs/',body);
+  r.code===0 ? (toast(r.message), bootstrap.Modal.getInstance($('dbModal'))?.hide(), loadDbs()) : toast(r.message,'danger');
+}
+async function delDb(id) { if (!confirm('確認刪除？')) return; const r=await R('DELETE','/api/db/configs/'+id+'/'); r.code===0?(toast('刪除成功'),loadDbs()):toast(r.message,'danger'); }
+async function testDb(id) { load(true,'測試連接...'); const r=await R('POST','/api/db/configs/'+id+'/test/',{}); load(false); toast(r.data?.message||r.message,r.data?.connected?'success':'danger'); }
+
+// ══════════ REDIS CONFIG ══════════
+async function loadRedis() {
+  const r = await R('GET','/api/redis/configs/'); if (r.code !== 0) return;
+  S.redis = r.data || [];
+  const cc = $('redisCards'); if (!cc) return;
+  if (!r.data?.length) { cc.innerHTML='<div class="col-12 text-center text-muted py-4">暫無Redis配置，點擊右上角添加</div>'; return; }
+  cc.innerHTML = r.data.map(d =>
+    '<div class="col-md-6 col-lg-4"><div class="card p-3">' +
+    '<div class="d-flex align-items-center gap-2 mb-2"><div style="font-size:1.6rem;color:#be123c"><i class="fas fa-server"></i></div><div><div class="fw-bold">'+eh(d.name)+'</div><div class="text-muted small">'+d.host+':'+d.port+' / db'+d.db+'</div></div></div>' +
+    (d.description?'<div class="text-muted small mb-2">'+eh(d.description)+'</div>':'') +
+    '<div class="d-flex gap-1"><button class="btn btn-sm btn-outline-success flex-fill" onclick="testRedis('+d.id+')"><i class="fas fa-plug me-1"></i>測試</button><button class="btn btn-sm btn-outline-primary" onclick="editRedis('+d.id+')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="delRedis('+d.id+')"><i class="fas fa-trash"></i></button></div>' +
+    '</div></div>'
+  ).join('');
+}
+function openRedisModal() {
+  ['redisId','redisName','redisPwd','redisDesc'].forEach(id=>{const e=$(id);if(e)e.value='';});
+  $('redisHost').value='127.0.0.1'; $('redisPort').value='6379'; $('redisDb').value='0';
+  $('redisMT').textContent='添加Redis配置'; bootstrap.Modal.getOrCreateInstance($('redisModal')).show();
+}
+async function editRedis(id) {
+  const r = await R('GET','/api/redis/configs/'+id+'/'); if (r.code !== 0) return;
+  const d = r.data;
+  $('redisId').value=d.id; $('redisName').value=d.name; $('redisHost').value=d.host;
+  $('redisPort').value=d.port; $('redisPwd').value=''; $('redisDb').value=d.db; $('redisDesc').value=d.description;
+  $('redisMT').textContent='編輯Redis配置'; bootstrap.Modal.getOrCreateInstance($('redisModal')).show();
+}
+async function saveRedis() {
+  const id = $('redisId').value;
+  const body = {name:$('redisName').value.trim(),host:$('redisHost').value,port:+$('redisPort').value,password:$('redisPwd').value,db:+$('redisDb').value,description:$('redisDesc').value};
+  if (!body.name) { toast('請填寫名稱','warning'); return; }
+  const r = id ? await R('PUT','/api/redis/configs/'+id+'/',body) : await R('POST','/api/redis/configs/',body);
+  r.code===0 ? (toast(r.message), bootstrap.Modal.getInstance($('redisModal'))?.hide(), loadRedis()) : toast(r.message,'danger');
+}
+async function delRedis(id) { if (!confirm('確認刪除？')) return; const r=await R('DELETE','/api/redis/configs/'+id+'/'); r.code===0?(toast('刪除成功'),loadRedis()):toast(r.message,'danger'); }
+async function testRedis(id) { load(true,'測試Redis連接...'); const r=await R('POST','/api/redis/configs/'+id+'/test/',{}); load(false); toast(r.data?.message||r.message,r.data?.connected?'success':'danger'); }
+
+// ══════════ REDIS TOOL ══════════
+async function loadRdTool() {
+  const r = await R('GET','/api/redis/configs/');
+  S.redis = r.data || [];
+  const sel = $('rdConn'); if (!sel) return;
+  sel.innerHTML = '<option value="">-- 請選擇 Redis --</option>' +
+    S.redis.map(d => '<option value="'+d.id+'">'+d.name+' ('+d.host+':'+d.port+'/db'+d.db+')</option>').join('');
+  rdToggleFields();
+}
+function rdToggleFields() {
+  const a = $('rdAction').value;
+  $('rdPatternWrap').style.display = a==='scan' ? '' : 'none';
+  $('rdKeyWrap').style.display = ['get','set','delete','ttl','expire'].includes(a) ? '' : 'none';
+  $('rdValWrap').style.display = a==='set' ? '' : 'none';
+  $('rdTtlWrap').style.display = ['set','expire'].includes(a) ? '' : 'none';
+  $('rdCaptchaWrap').style.display = a==='fetch_captcha' ? '' : 'none';
+}
+async function execRedis() {
+  const rdId = $('rdConn').value;
+  if (!rdId) { toast('請選擇Redis連接','warning'); return; }
+  const action = $('rdAction').value;
+  const body = {redis_id:+rdId, action};
+  if (action==='scan') body.pattern = $('rdPattern').value || '*';
+  else if (action==='get'||action==='ttl') body.key = $('rdKey').value;
+  else if (action==='set') { body.key=$('rdKey').value; body.value=$('rdVal').value; body.ttl=+$('rdTtl').value||0; }
+  else if (action==='delete') body.keys = [$('rdKey').value];
+  else if (action==='expire') { body.key=$('rdKey').value; body.ttl=+$('rdTtl').value; }
+  else if (action==='fetch_captcha') {
+    body.key = $('rdCapKey').value; body.var_name = $('rdCapVar').value;
+    const field = $('rdCapField').value.trim();
+    if (field) body.extract_field = field;
+  }
+  load(true,'Redis 執行中...');
+  const r = await R('POST','/api/redis/operate/', body);
+  load(false);
+  // reset display
+  ['rdKeyListWrap','rdResWrap','rdCapResWrap'].forEach(id => { const e=$(id); if(e) e.style.display='none'; });
+  $('rdResTitle').textContent = '結果';
+
+  if (action==='scan' && r.data?.keys !== undefined) {
+    $('rdResTitle').textContent = 'SCAN 結果';
+    $('rdKeyListWrap').style.display = '';
+    $('rdKeyCount').textContent = '共 ' + r.data.total + ' 個 Key（Pattern: ' + r.data.pattern + '）';
+    $('rdKeyList').innerHTML = r.data.keys.length
+      ? r.data.keys.map(k => '<div class="rki"><i class="fas fa-key fa-xs text-muted"></i><code style="flex:1">'+eh(k)+'</code><button class="btn btn-outline-secondary" style="font-size:.65rem;padding:1px 5px" onclick="rdFillKey(\''+esc(k)+'\')">填入</button></div>').join('')
+      : '<div class="text-center text-muted py-3">無匹配 Key</div>';
+  } else if (action==='fetch_captcha' && r.data?.success) {
+    $('rdCapResWrap').style.display = '';
+    $('rdCapMsg').innerHTML = '<i class="fas fa-check-circle me-2"></i>' + eh(r.data.message || '獲取成功');
+    // FIX: use r.data.var_name directly (string interpolation without double-escaping)
+    const varName = r.data.var_name || '';
+    $('rdCapDetail').innerHTML =
+      '<tr><td class="fw-bold text-nowrap">Redis Key</td><td><code>'+eh(r.data.key)+'</code></td></tr>' +
+      '<tr><td class="fw-bold text-nowrap">原始值</td><td><code>'+eh(String(r.data.raw_value))+'</code></td></tr>' +
+      '<tr><td class="fw-bold text-nowrap">提取值</td><td><code class="text-success fw-bold">'+eh(String(r.data.extracted_value))+'</code></td></tr>' +
+      '<tr><td class="fw-bold text-nowrap">存入變量</td><td><code class="text-primary">{{' + eh(varName) + '}}</code><small class="text-muted ms-2">接口Body中可直接使用</small></td></tr>' +
+      '<tr><td class="fw-bold text-nowrap">TTL</td><td>' + (r.data.ttl > 0 ? r.data.ttl+'秒後過期' : r.data.ttl===-1 ? '永不過期' : '已過期') + '</td></tr>';
+    toast('驗證碼已存入全局變量 {{' + varName + '}}', 'success');
+  } else {
+    $('rdResWrap').style.display = '';
+    $('rdResBox').textContent = r.data ? JSON.stringify(r.data, null, 2) : (r.message || '操作失敗');
+    if (!r.data?.success && r.code !== 0) toast(r.message || '操作失敗', 'danger');
+    else if (r.data?.success) toast(r.data.message || '操作成功', 'success');
+  }
+}
+function rdFillKey(k) { $('rdKey').value=k; $('rdAction').value='get'; rdToggleFields(); }
+function rdCopyKeys() {
+  const keys = [...$('rdKeyList').querySelectorAll('code')].map(c=>c.textContent).join('\n');
+  navigator.clipboard?.writeText(keys).then(()=>toast('已複製 '+$('rdKeyList').querySelectorAll('code').length+' 個 Key'));
+}
+
+// ══════════ EMAIL ══════════
+async function loadEmails() {
+  const r = await R('GET','/api/email/configs/'); if (r.code !== 0) return;
+  const cc = $('emailCards'); if (!cc) return;
+  if (!r.data?.length) { cc.innerHTML='<div class="col-12 text-center text-muted py-4">暫無郵件配置，點擊右上角添加</div>'; return; }
+  cc.innerHTML = r.data.map(d =>
+    '<div class="col-md-6 col-lg-4"><div class="card p-3">' +
+    '<div class="d-flex align-items-center gap-2 mb-2"><div style="font-size:1.6rem;color:#4f46e5"><i class="fas fa-envelope"></i></div><div><div class="fw-bold">'+eh(d.name)+' '+(d.is_active?'<span class="badge bg-success">啟用</span>':'<span class="badge bg-secondary">停用</span>')+'</div><div class="text-muted small">'+eh(d.smtp_host)+':'+d.smtp_port+' · '+eh(d.username)+'</div></div></div>' +
+    '<div class="text-muted small mb-2">'+(d.use_ssl?'SSL':d.use_tls?'TLS':'普通')+' · 發件人: '+eh(d.from_name)+'</div>' +
+    '<div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary flex-fill" onclick="editEmail('+d.id+')"><i class="fas fa-edit me-1"></i>編輯</button><button class="btn btn-sm btn-outline-danger" onclick="delEmail('+d.id+')"><i class="fas fa-trash"></i></button></div>' +
+    '</div></div>'
+  ).join('');
+}
+function openEmailModal() {
+  ['emailId','emailSmtpHost','emailUser','emailPwd','emailFrom'].forEach(id=>{const e=$(id);if(e)e.value='';});
+  $('emailName').value='默認郵件配置'; $('emailFromName').value='API測試平台';
+  $('emailSmtpPort').value='465'; $('emailSsl').checked=true; $('emailTls').checked=false; $('emailActive').checked=true;
+  $('emailMT').textContent='添加郵件配置'; bootstrap.Modal.getOrCreateInstance($('emailModal')).show();
+}
+async function editEmail(id) {
+  const r = await R('GET','/api/email/configs/'+id+'/'); if (r.code !== 0) return;
+  const d = r.data;
+  $('emailId').value=d.id; $('emailName').value=d.name; $('emailSmtpHost').value=d.smtp_host;
+  $('emailSmtpPort').value=d.smtp_port; $('emailSsl').checked=d.use_ssl; $('emailTls').checked=d.use_tls;
+  $('emailUser').value=d.username; $('emailPwd').value='';
+  $('emailFrom').value=d.from_addr; $('emailFromName').value=d.from_name; $('emailActive').checked=d.is_active;
+  $('emailMT').textContent='編輯郵件配置'; bootstrap.Modal.getOrCreateInstance($('emailModal')).show();
+}
+async function saveEmail() {
+  const id = $('emailId').value;
+  const body={name:$('emailName').value.trim(),smtp_host:$('emailSmtpHost').value,smtp_port:+$('emailSmtpPort').value,use_ssl:$('emailSsl').checked,use_tls:$('emailTls').checked,username:$('emailUser').value,password:$('emailPwd').value,from_addr:$('emailFrom').value||$('emailUser').value,from_name:$('emailFromName').value,is_active:$('emailActive').checked};
+  if (!body.smtp_host||!body.username) { toast('請填寫SMTP主機和郵箱賬號','warning'); return; }
+  const r = id ? await R('PUT','/api/email/configs/'+id+'/',body) : await R('POST','/api/email/configs/',body);
+  r.code===0 ? (toast(r.message), bootstrap.Modal.getInstance($('emailModal'))?.hide(), loadEmails()) : toast(r.message,'danger');
+}
+async function delEmail(id) { if (!confirm('確認刪除？')) return; const r=await R('DELETE','/api/email/configs/'+id+'/'); r.code===0?(toast('刪除成功'),loadEmails()):toast(r.message,'danger'); }
+async function testEmailSend() {
+  const to = prompt('請輸入測試收件人郵箱:'); if (!to) return;
+  const id = $('emailId').value; if (!id) { toast('請先保存配置再測試','warning'); return; }
+  load(true,'發送測試郵件...');
+  const r = await R('POST','/api/email/configs/'+id+'/test/',{to});
+  load(false); toast(r.data?.message||r.message, r.data?.sent?'success':'danger');
+}
+
+// ══════════ SCHEDULER ══════════
+async function loadTasks() {
+  const r = await R('GET','/api/scheduler/tasks/'); if (r.code !== 0) return;
+  const tb = $('taskTb');
+  if (!r.data?.length) { tb.innerHTML='<tr><td colspan="7" class="text-center text-muted py-4">暫無定時任務，點擊右上角新建</td></tr>'; return; }
+  tb.innerHTML = r.data.map(t => {
+    const sc = {active:'ts-active',paused:'ts-paused',stopped:'ts-stopped'}[t.status]||'';
+    const sl = {active:'✓ 運行中',paused:'⏸ 已暫停',stopped:'⬛ 已停止'}[t.status]||t.status;
+    const trig = t.trigger_type==='cron'
+      ? '<span class="badge bg-light text-dark border"><i class="fas fa-clock me-1"></i>'+eh(t.cron_expr)+'</span>'
+      : '<span class="badge bg-light text-dark border"><i class="fas fa-redo me-1"></i>每'+t.interval_secs+'秒</span>';
+    const nxt = t.scheduler_status?.next_run ? '<small class="text-success">'+t.scheduler_status.next_run+'</small>' : '<small class="text-muted">-</small>';
+    return '<tr>' +
+      '<td><strong>'+eh(t.name)+'</strong>'+(t.description?'<br><small class="text-muted">'+eh(t.description)+'</small>':'')+'</td>' +
+      '<td>'+trig+'</td><td>'+nxt+'</td>' +
+      '<td><span class="'+sc+'">'+sl+'</span></td>' +
+      '<td><small>'+eh(t.last_result||'-')+'</small>'+(t.last_report_id?'<br><a href="#" onclick="showRpt('+t.last_report_id+');return false" class="badge bg-info text-decoration-none" style="font-size:.65rem">查看報告</a>':'')+'</td>' +
+      '<td>'+(t.send_email?'<i class="fas fa-check text-success" title="'+eh(t.email_to)+'"></i>':'<i class="fas fa-times text-muted"></i>')+'</td>' +
+      '<td class="text-nowrap">' +
+      '<button class="btn btn-sm btn-outline-success me-1" onclick="runTask('+t.id+')" title="立即執行"><i class="fas fa-play fa-xs"></i></button>' +
+      '<button class="btn btn-sm btn-outline-'+(t.status==='active'?'warning':'success')+' me-1" onclick="toggleTask('+t.id+')" title="'+(t.status==='active'?'暫停':'恢復')+'"><i class="fas fa-'+(t.status==='active'?'pause':'play-circle')+' fa-xs"></i></button>' +
+      '<button class="btn btn-sm btn-outline-primary me-1" onclick="editTask('+t.id+')" title="編輯"><i class="fas fa-edit fa-xs"></i></button>' +
+      '<button class="btn btn-sm btn-outline-danger" onclick="delTask('+t.id+')" title="刪除"><i class="fas fa-trash fa-xs"></i></button>' +
+      '</td></tr>';
+  }).join('');
+}
+async function loadTaskApis() {
+  const r = await R('GET','/api/apis/?page=1&page_size=200');
+  const list = $('taskApiList'); if (!list) return;
+  if (!r.data?.items?.length) { list.innerHTML='<div class="text-center text-muted py-3">暫無接口</div>'; return; }
+  list.innerHTML = r.data.items.map(a =>
+    '<div class="asi"><input type="checkbox" class="form-check-input task-api-cb" value="'+a.id+'"><span class="bm '+a.method.toLowerCase()+'">'+a.method+'</span>'+(a.use_async?'<span class="at2 ms-1">async</span>':'')+'<span style="flex:1">'+eh(a.name)+'</span><small class="text-muted">'+eh(a.category_name)+'</small></div>'
+  ).join('');
+}
+function openTaskModal() {
+  ['taskId','taskName','taskDesc','taskEmailTo'].forEach(id=>{const e=$(id);if(e)e.value='';});
+  $('taskTrigger').value='cron'; $('taskCron').value='0 9 * * *'; $('taskInterval').value='3600';
+  $('taskStatus').value='active'; $('taskRptTpl').value='定時任務-{task}'; $('taskSendEmail').checked=false;
+  document.querySelectorAll('.task-api-cb').forEach(c=>c.checked=false);
+  togTaskTrigger(); $('taskMT').textContent='新建定時任務';
+  bootstrap.Modal.getOrCreateInstance($('taskModal')).show();
+}
+function togTaskTrigger() {
+  const t = $('taskTrigger').value;
+  $('taskCronWrap').style.display = t==='cron' ? '' : 'none';
+  $('taskIntervalWrap').style.display = t==='interval' ? '' : 'none';
+}
+async function editTask(id) {
+  const r = await R('GET','/api/scheduler/tasks/'+id+'/'); if (r.code !== 0) return;
+  const t = r.data;
+  $('taskId').value=t.id; $('taskName').value=t.name; $('taskTrigger').value=t.trigger_type;
+  $('taskCron').value=t.cron_expr; $('taskInterval').value=t.interval_secs;
+  $('taskStatus').value=t.status; $('taskRptTpl').value=t.report_name_tpl;
+  $('taskSendEmail').checked=t.send_email; $('taskEmailTo').value=t.email_to; $('taskDesc').value=t.description;
+  togTaskTrigger();
+  document.querySelectorAll('.task-api-cb').forEach(cb => { cb.checked = t.api_ids.includes(+cb.value); });
+  $('taskMT').textContent='編輯定時任務'; bootstrap.Modal.getOrCreateInstance($('taskModal')).show();
+}
+async function saveTask() {
+  const id = $('taskId').value;
+  const api_ids = [...$('taskApiList').querySelectorAll('.task-api-cb:checked')].map(c=>+c.value);
+  const body={name:$('taskName').value.trim(),api_ids,trigger_type:$('taskTrigger').value,cron_expr:$('taskCron').value,interval_secs:+$('taskInterval').value,status:$('taskStatus').value,report_name_tpl:$('taskRptTpl').value,send_email:$('taskSendEmail').checked,email_to:$('taskEmailTo').value,description:$('taskDesc').value};
+  if (!body.name) { toast('請填寫任務名稱','warning'); return; }
+  if (!body.api_ids.length) { toast('請至少選擇一個接口','warning'); return; }
+  const r = id ? await R('PUT','/api/scheduler/tasks/'+id+'/',body) : await R('POST','/api/scheduler/tasks/',body);
+  r.code===0 ? (toast(r.message), bootstrap.Modal.getInstance($('taskModal'))?.hide(), loadTasks()) : toast(r.message,'danger');
+}
+async function runTask(id) { load(true,'立即執行任務...'); const r=await R('POST','/api/scheduler/tasks/'+id+'/run/',{}); load(false); toast(r.message,r.code===0?'success':'danger'); setTimeout(loadTasks,2000); }
+async function toggleTask(id) { const r=await R('POST','/api/scheduler/tasks/'+id+'/toggle/',{}); r.code===0?(toast(r.message),loadTasks()):toast(r.message,'danger'); }
+async function delTask(id) { if(!confirm('確認刪除任務？'))return; const r=await R('DELETE','/api/scheduler/tasks/'+id+'/'); r.code===0?(toast('刪除成功'),loadTasks()):toast(r.message,'danger'); }
+
+// ══════════ RUNNER ══════════
+S.rnrSel = new Set();
+async function loadRnrApis() {
+  const kw=$('rnrSrc')?.value||'', cat=$('rnrCat')?.value||'';
+  let url='/api/apis/?page=1&page_size=200&keyword='+encodeURIComponent(kw);
+  if (cat) url+='&category_id='+cat;
+  const r = await R('GET',url); const list=$('rnrList');
+  if (r.code!==0||!r.data.items.length) { list.innerHTML='<div class="text-center text-muted py-4">暫無接口</div>'; return; }
+  list.innerHTML = r.data.items.map(a =>
+    '<div class="asi" onclick="togRnr('+a.id+',this)">' +
+    '<input type="checkbox" class="form-check-input rnr-cb" value="'+a.id+'"'+(S.rnrSel.has(a.id)?' checked':'')+'>' +
+    '<span class="bm '+a.method.toLowerCase()+'">'+a.method+'</span>' +
+    (a.use_async?'<span class="at2 ms-1">async</span>':'') +
+    '<span style="flex:1">'+eh(a.name)+'</span>' +
+    '<small class="text-muted">'+eh(a.category_name)+'</small></div>'
+  ).join('');
+  updRnrBadges();
+}
+function togRnr(id, row) { const cb=row.querySelector('.rnr-cb'); cb.checked=!cb.checked; cb.checked?S.rnrSel.add(id):S.rnrSel.delete(id); updRnrBadges(); }
+function rnrAll() { document.querySelectorAll('.rnr-cb').forEach(c=>{c.checked=true;S.rnrSel.add(+c.value);}); updRnrBadges(); }
+function rnrNone() { document.querySelectorAll('.rnr-cb').forEach(c=>c.checked=false); S.rnrSel.clear(); updRnrBadges(); }
+function updRnrBadges() {
+  const w=$('rnrSel');
+  if (!S.rnrSel.size) { w.innerHTML='<span class="text-muted small">未選擇接口</span>'; return; }
+  w.innerHTML = [...S.rnrSel].map(id => {
+    const item = document.querySelector('.rnr-cb[value="'+id+'"]');
+    const lbl = item?.closest('.asi')?.querySelector('span[style]')?.textContent || 'ID:'+id;
+    return '<span class="badge bg-primary">'+eh(lbl.trim())+' <span style="cursor:pointer" onclick="rmRnr('+id+')">✕</span></span>';
+  }).join(' ');
+}
+function rmRnr(id) { S.rnrSel.delete(id); const cb=document.querySelector('.rnr-cb[value="'+id+'"]'); if(cb)cb.checked=false; updRnrBadges(); }
+async function runBatch() {
+  const ids=[...S.rnrSel]; if(!ids.length){toast('請選擇至少一個接口','warning');return;}
+  load(true,'批量執行 '+ids.length+' 個接口...');
+  const body={api_ids:ids, report_name:$('rnrName').value.trim()};
+  const r = await R('POST','/api/run/batch/',body);
+  load(false);
+  if (r.code!==0){toast(r.message,'danger');return;}
+  const d=r.data;
+  const pc=d.pass_rate===100?'success':d.pass_rate>=60?'warning':'danger';
+  const fw=d.total>0?(d.failed/d.total*100).toFixed(1):0;
+  const ew=d.total>0?(d.error/d.total*100).toFixed(1):0;
+  $('rnrRes').style.display='';
+  $('rnrResBody').innerHTML =
+    '<div class="row g-2 mb-2 text-center">' +
+    '<div class="col-3"><div class="fw-bold fs-5">'+d.total+'</div><div class="text-muted small">總數</div></div>' +
+    '<div class="col-3"><div class="fw-bold fs-5 text-success">'+d.passed+'</div><div class="text-muted small">通過</div></div>' +
+    '<div class="col-3"><div class="fw-bold fs-5 text-danger">'+d.failed+'</div><div class="text-muted small">失敗</div></div>' +
+    '<div class="col-3"><div class="fw-bold fs-5 text-warning">'+d.error+'</div><div class="text-muted small">錯誤</div></div></div>' +
+    '<div class="rbar mb-2"><div class="rp" style="width:'+d.pass_rate+'%"></div><div class="rf" style="width:'+fw+'%"></div><div class="re" style="width:'+ew+'%"></div></div>' +
+    '<div class="d-flex justify-content-between small mb-3"><span>通過率：<strong class="text-'+pc+'">'+d.pass_rate+'%</strong></span><span>耗時：'+d.duration+'s</span></div>';
+  // 郵件
+  if ($('rnrEmail').checked && $('rnrEmailTo').value.trim()) {
+    const er = await R('POST','/api/email/send-report/',{report_id:d.report_id,email_to:$('rnrEmailTo').value.trim()});
+    $('rnrResBody').innerHTML += '<div class="alert '+(er.code===0?'alert-success':'alert-warning')+' py-2 small mb-2"><i class="fas fa-envelope me-1"></i>'+(er.data?.message||er.message)+'</div>';
+  }
+  $('rnrResBody').innerHTML += '<button class="btn btn-outline-primary w-100 btn-sm" onclick="showRpt('+d.report_id+')"><i class="fas fa-file-alt me-1"></i>查看詳細報告</button>';
+  toast('執行完成，通過率 '+d.pass_rate+'%', d.pass_rate===100?'success':'warning');
+}
+
+// ══════════ LOCUST ══════════
+async function loadLocustApis() {
+  const r = await R('GET','/api/apis/?page=1&page_size=200');
+  const list=$('locustApiList'); if (!list) return;
+  if (!r.data?.items?.length) { list.innerHTML='<div class="text-center text-muted py-3">暫無接口</div>'; return; }
+  list.innerHTML = r.data.items.map(a =>
+    '<div class="asi"><input type="checkbox" class="form-check-input locust-cb" value="'+a.id+'"><span class="bm '+a.method.toLowerCase()+'">'+a.method+'</span><span style="flex:1">'+eh(a.name)+'</span><small class="text-muted">'+eh(a.category_name)+'</small></div>'
+  ).join('');
+}
+function getLocustIds() { return [...document.querySelectorAll('.locust-cb:checked')].map(c=>+c.value); }
+async function locustPreview() {
+  const ids = getLocustIds(); if (!ids.length){toast('請選擇接口','warning');return;}
+  load(true,'生成腳本...');
+  const r = await R('POST','/api/locust/preview/',{api_ids:ids});
+  load(false);
+  $('lstScriptCard').style.display='';
+  $('lstScript').textContent = r.data || r.message || '生成失敗';
+}
+async function locustStart() {
+  const ids = getLocustIds(); if (!ids.length){toast('請選擇接口','warning');return;}
+  const body={api_ids:ids,users:+$('lstUsers').value||10,spawn_rate:+$('lstSpawn').value||2,run_time:$('lstTime').value||'60s'};
+  load(true,'啟動Locust...');
+  const r = await R('POST','/api/locust/start/',body);
+  load(false);
+  if (r.code!==0||!r.data?.success){toast(r.data?.message||r.message,'danger');return;}
+  S.lstTaskId = r.data.task_id;
+  toast('Locust 已啟動，PID='+r.data.pid,'success');
+  $('lstStartBtn').style.display='none'; $('lstStopBtn').style.display='';
+  $('lstStatusBadge').className='badge bg-success pulse'; $('lstStatusBadge').textContent='▶ 執行中';
+  lstPollStatus();
+}
+function lstPollStatus() {
+  if (S.lstPollTimer) clearInterval(S.lstPollTimer);
+  S.lstPollTimer = setInterval(async ()=>{
+    if (!S.lstTaskId) { clearInterval(S.lstPollTimer); return; }
+    const r = await R('GET','/api/locust/status/'+S.lstTaskId+'/');
+    const d = r.data;
+    if (!d) return;
+    const elapsed = d.elapsed || 0;
+    $('lstStatusBody').innerHTML =
+      '<div class="row g-2 text-center">' +
+      '<div class="col-4 col-md-2"><div class="locust-stat"><div class="val">'+d.users+'</div><div class="lbl">用戶數</div></div></div>' +
+      '<div class="col-4 col-md-2"><div class="locust-stat"><div class="val">'+eh(d.run_time||'-')+'</div><div class="lbl">設定時長</div></div></div>' +
+      '<div class="col-4 col-md-2"><div class="locust-stat"><div class="val">'+elapsed+'s</div><div class="lbl">已執行</div></div></div>' +
+      '<div class="col-6 col-md-3"><div class="locust-stat"><div class="val">'+eh(d.status||'-')+'</div><div class="lbl">狀態</div></div></div>' +
+      '<div class="col-6 col-md-3"><div class="locust-stat"><div class="val">'+eh(String(d.pid||'-'))+'</div><div class="lbl">PID</div></div></div>' +
+      '</div>';
+    if (d.status==='completed'||d.status==='error'||d.status==='stopped') {
+      clearInterval(S.lstPollTimer);
+      $('lstStartBtn').style.display=''; $('lstStopBtn').style.display='none';
+      $('lstStatusBadge').className='badge bg-'+(d.status==='completed'?'success':'danger');
+      $('lstStatusBadge').textContent = d.status==='completed'?'✓ 完成':'✗ '+(d.status==='error'?'錯誤':'已停止');
+      if (d.status==='completed') lstCollect();
+    }
+  }, 2000);
+}
+async function locustStop() {
+  if (!S.lstTaskId){toast('無運行中任務','warning');return;}
+  const r = await R('GET','/api/locust/stop/'+S.lstTaskId+'/');
+  clearInterval(S.lstPollTimer);
+  $('lstStartBtn').style.display=''; $('lstStopBtn').style.display='none';
+  $('lstStatusBadge').className='badge bg-secondary'; $('lstStatusBadge').textContent='已停止';
+  toast(r.data?.message||'已停止','warning');
+  lstCollect();
+}
+async function lstCollect() {
+  if (!S.lstTaskId) return;
+  const rname = $('lstRptName').value.trim() || '';
+  const r = await R('POST','/api/locust/collect/'+S.lstTaskId+'/',{report_name:rname});
+  if (!r.data?.success) { toast(r.data?.message||'收集結果失敗','warning'); return; }
+  const stats = r.data.stats;
+  $('lstResultCard').style.display='';
+  $('lstResultBody').innerHTML =
+    '<div class="row g-2 text-center mb-3">' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.total_requests+'</div><div class="lbl">總請求</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val text-danger">'+stats.total_failures+'</div><div class="lbl">失敗數</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.avg_response_time+'ms</div><div class="lbl">平均響應</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.p90+'ms</div><div class="lbl">P90</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.p99+'ms</div><div class="lbl">P99</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.rps+'</div><div class="lbl">RPS</div></div></div>' +
+    '</div>' +
+    '<table class="table table-sm table-bordered" style="font-size:.77rem"><thead><tr><th>接口</th><th>請求數</th><th>失敗</th><th>平均ms</th><th>P90ms</th><th>RPS</th></tr></thead><tbody>' +
+    (stats.per_endpoint||[]).map(ep=>'<tr><td>'+eh(ep.name)+'</td><td>'+ep.requests+'</td><td class="text-danger">'+ep.failures+'</td><td>'+ep.avg_ms+'</td><td>'+ep.p90_ms+'</td><td>'+ep.rps+'</td></tr>').join('') +
+    '</tbody></table>' +
+    '<button class="btn btn-outline-primary btn-sm w-100" onclick="showRpt('+r.data.report_id+')"><i class="fas fa-chart-bar me-1"></i>查看測試報告</button>';
+  toast('壓測報告已保存 (ID='+r.data.report_id+')','success');
+}
+
+// ══════════ SQL TOOL ══════════
+async function loadSqlDbs() {
+  const r = await R('GET','/api/db/configs/'); if (r.code !== 0) return;
+  S.dbs = r.data || [];
+  const sel=$('sqlDb'); if (!sel) return;
+  sel.innerHTML = '<option value="">-- 請選擇 --</option>' +
+    r.data.map(d=>'<option value="'+d.id+'">'+d.name+' ('+d.host+'/'+d.database+')</option>').join('');
+}
+function insSql(t) { const ta=$('sqlText'); ta.value=(ta.value?ta.value+'\n\n':'')+SQL_TPL[t]; ta.focus(); }
+async function runSql() {
+  const db=$('sqlDb').value, sql=$('sqlText').value.trim();
+  if (!db){toast('請選擇數據庫','warning');return;}
+  if (!sql){toast('請輸入SQL','warning');return;}
+  load(true,'執行SQL...');
+  const r = await R('POST','/api/db/execute/',{db_id:db, sql});
+  load(false);
+  $('sqlResWrap').style.display='';
+  $('sqlResTitle').textContent='執行結果 ('+(r.data?.statements?.length||0)+' 條語句)';
+  if (r.code!==0) { $('sqlResBody').innerHTML='<div class="p-3"><div class="alert alert-danger">'+eh(r.message)+'</div></div>'; return; }
+  let h='';
+  (r.data?.statements||[]).forEach(s => {
+    const ok = !s.error;
+    h += '<div class="p-3 border-bottom"><div class="d-flex align-items-center gap-2 mb-2"><span class="badge bg-'+(ok?'success':'danger')+'">'+(ok?'✓':'✗')+'</span><span class="badge bg-secondary">'+eh(s.type)+'</span><code class="text-muted small">'+eh(s.sql.substring(0,80))+(s.sql.length>80?'..':'')+'</code><span class="ms-auto text-muted small">影響行: '+s.affected+'</span></div>' +
+      (s.error?'<div class="alert alert-danger py-1 small mb-2">'+eh(s.error)+'</div>':'') +
+      (s.rows?.length?'<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:.74rem"><thead><tr>'+Object.keys(s.rows[0]).map(k=>'<th>'+eh(k)+'</th>').join('')+'</tr></thead><tbody>'+s.rows.slice(0,50).map(row=>'<tr>'+Object.values(row).map(v=>'<td>'+eh(String(v??''))+'</td>').join('')+'</tr>').join('')+'</tbody></table>'+(s.rows.length>50?'<div class="text-muted small p-1">顯示前50行，共'+s.rows.length+'行</div>':'')+'</div>':'') +
+      '</div>';
+  });
+  $('sqlResBody').innerHTML = h || '<div class="p-3 text-muted">無結果</div>';
+}
+
+// ══════════ REPORTS ══════════
+async function loadRpts(p) {
+  if (p) S.rptPg = p;
+  const r = await R('GET','/api/reports/?page='+S.rptPg+'&page_size=10');
+  if (r.code !== 0) return;
+  const {items, total, pages, page:cur} = r.data;
+  const tb=$('rptTb');
+  if (!items.length) { tb.innerHTML='<tr><td colspan="7" class="text-center text-muted py-4">暫無測試報告</td></tr>'; return; }
+  tb.innerHTML = items.map(r => {
+    const fw=r.total>0?(r.failed/r.total*100).toFixed(1):0;
+    const ew=r.total>0?(r.error/r.total*100).toFixed(1):0;
+    const pc=r.pass_rate===100?'success':r.pass_rate>=60?'warning':'danger';
+    return '<tr><td><strong>'+eh(r.name)+'</strong></td>' +
+      '<td style="min-width:100px"><div class="rbar mb-1"><div class="rp" style="width:'+r.pass_rate+'%"></div><div class="rf" style="width:'+fw+'%"></div><div class="re" style="width:'+ew+'%"></div></div><small class="text-'+pc+' fw-bold">'+r.pass_rate+'%</small></td>' +
+      '<td><span class="text-success">'+r.passed+'</span>/<span class="text-danger">'+r.failed+'</span>/<span class="text-warning">'+r.error+'</span></td>' +
+      '<td>'+r.total+'</td><td class="text-muted small">'+r.duration+'s</td><td class="text-muted small">'+r.created_at+'</td>' +
+      '<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" onclick="showRpt('+r.id+')">詳情</button><button class="btn btn-sm btn-outline-warning me-1" onclick="sendRptEmail('+r.id+')" title="發送郵件"><i class="fas fa-envelope fa-xs"></i></button><button class="btn btn-sm btn-outline-danger" onclick="delRpt('+r.id+')"><i class="fas fa-trash fa-xs"></i></button></td></tr>';
+  }).join('');
+  $('rptTot').textContent='共 '+total+' 條'; pgRender('rptPg',cur,pages,'loadRpts');
+}
+async function delRpt(id) { if(!confirm('確認刪除？'))return; const r=await R('DELETE','/api/reports/'+id+'/'); r.code===0?(toast('刪除成功'),loadRpts()):toast(r.message,'danger'); }
+async function sendRptEmail(id) {
+  const to = prompt('收件人郵箱（多個逗號分隔）:'); if (!to) return;
+  load(true,'發送郵件報告...');
+  const r = await R('POST','/api/email/send-report/',{report_id:id,email_to:to});
+  load(false); toast(r.data?.message||r.message, r.code===0?'success':'danger');
+}
+async function showRpt(id) {
+  $('rptBody').innerHTML='<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+  bootstrap.Modal.getOrCreateInstance($('rptModal')).show();
+  const r = await R('GET','/api/reports/'+id+'/'); if (r.code!==0){$('rptBody').innerHTML='<div class="alert alert-danger">'+r.message+'</div>';return;}
+  const d=r.data; $('rptMT').textContent='報告: '+d.name;
+  const fw=d.total>0?(d.failed/d.total*100).toFixed(1):0;
+  const ew=d.total>0?(d.error/d.total*100).toFixed(1):0;
+  let h='<div class="row g-2 mb-3 text-center">' +
+    '<div class="col"><div class="p-2 bg-light rounded"><div class="fw-bold fs-5">'+d.total+'</div><div class="text-muted small">總數</div></div></div>' +
+    '<div class="col"><div class="p-2 rounded" style="background:#d1fae5"><div class="fw-bold fs-5 text-success">'+d.passed+'</div><div class="text-muted small">通過</div></div></div>' +
+    '<div class="col"><div class="p-2 rounded" style="background:#fee2e2"><div class="fw-bold fs-5 text-danger">'+d.failed+'</div><div class="text-muted small">失敗</div></div></div>' +
+    '<div class="col"><div class="p-2 rounded" style="background:#fef3c7"><div class="fw-bold fs-5 text-warning">'+d.error+'</div><div class="text-muted small">錯誤</div></div></div>' +
+    '<div class="col"><div class="p-2 bg-light rounded"><div class="fw-bold fs-5">'+d.pass_rate+'%</div><div class="text-muted small">通過率</div></div></div>' +
+    '<div class="col"><div class="p-2 bg-light rounded"><div class="fw-bold fs-5">'+d.duration+'s</div><div class="text-muted small">耗時</div></div></div></div>' +
+    '<div class="rbar mb-3" style="height:10px"><div class="rp" style="width:'+d.pass_rate+'%"></div><div class="rf" style="width:'+fw+'%"></div><div class="re" style="width:'+ew+'%"></div></div>' +
+    '<div class="d-flex justify-content-end mb-2"><button class="btn btn-sm btn-outline-warning" onclick="sendRptEmail('+d.id+')"><i class="fas fa-envelope me-1"></i>發送郵件報告</button></div>' +
+    '<div class="accordion">';
+  d.results.forEach((res,i) => {
+    const sc=res.status==='pass'?'success':res.status==='fail'?'danger':'warning';
+    const hc=res.response_status>=200&&res.response_status<300?'success':'danger';
+    const statusIcon = res.status==='pass'?'✓':res.status==='fail'?'✗':'⚠';
+    const hasDD = res.deepdiff_results?.length;
+    const hasDB = res.db_assertion_results?.length||res.pre_sql_result||res.post_sql_result;
+    h += '<div class="accordion-item border rounded mb-2">' +
+      '<h2 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#r'+i+'">' +
+      '<span class="badge bg-'+sc+' me-2">'+statusIcon+'</span>' +
+      '<span class="bm '+res.method.toLowerCase()+' me-2">'+res.method+'</span>' +
+      (res.use_async?'<span class="at2 me-1">async</span>':'') +
+      '<strong>'+eh(res.api_name)+'</strong>' +
+      (hasDD?'<span class="dt ms-2">DD</span>':'') +
+      (hasDB?'<span class="dt ms-1">DB</span>':'') +
+      '<span class="ms-auto me-3 badge bg-'+hc+'">'+res.response_status+'</span>' +
+      '<span class="badge bg-secondary">'+res.response_time+'ms</span></button></h2>' +
+      '<div id="r'+i+'" class="accordion-collapse collapse"><div class="accordion-body p-3 small">' +
+      '<div class="row g-2">' +
+      '<div class="col-md-6">' +
+      (res.error_message?'<div class="alert alert-danger py-1 mb-2">'+eh(res.error_message)+'</div>':'') +
+      (res.assertion_results?.length?'<div class="mb-2"><strong>HTTP斷言：</strong>'+res.assertion_results.map(a=>'<span class="badge bg-'+(a.passed?'success':'danger')+' d-inline-block me-1 mb-1">'+eh(a.passed?'✓':'✗')+' '+eh(a.message||'')+'</span>').join('')+'</div>':'') +
+      (hasDD?'<div class="mb-2"><strong>DeepDiff <span class="dt">DD</span>：</strong>'+res.deepdiff_results.map(a=>'<div class="badge bg-'+(a.passed?'success':'danger')+' d-block text-start mb-1">'+eh(a.message||'')+(a.diff?'<br><small>'+eh(a.diff.substring(0,100))+'</small>':'')+'</div>').join('')+'</div>':'') +
+      (res.db_assertion_results?.length?'<div class="mb-2"><strong>DB斷言 <span class="dt">DB</span>：</strong>' +
+        res.db_assertion_results.map(a => {
+          const main = '<span class="badge bg-'+(a.passed?'success':'danger')+' d-block text-start mb-1">'+eh(a.passed?'✓':'✗')+' '+eh(a.message||'')+'</span>';
+          const subs = (a.field_results||[]).length > 1
+            ? '<div class="ms-3 mb-1">' + a.field_results.map(f=>'<span class="badge bg-'+(f.passed?'success':'danger')+' d-inline-block me-1 mb-1">'+eh(f.message||'')+'</span>').join('') + '</div>'
+            : '';
+          return main + subs;
+        }).join('') + '</div>':'') +
+      (res.extracted_vars&&Object.keys(res.extracted_vars||{}).length?'<div class="mb-2"><strong>提取：</strong>'+Object.entries(res.extracted_vars).map(([k,v])=>'<code>'+k+'='+eh(String(v))+'</code> ').join('')+'</div>':'') +
+      (res.pre_sql_result?'<div class="mb-1"><strong>前置SQL：</strong><div class="sqr mt-1" style="max-height:70px">'+eh(res.pre_sql_result.substring(0,300))+'</div></div>':'') +
+      (res.post_sql_result?'<div class="mb-1"><strong>後置SQL：</strong><div class="sqr mt-1" style="max-height:70px">'+eh(res.post_sql_result.substring(0,300))+'</div></div>':'') +
+      '</div>' +
+      '<div class="col-md-6"><strong>響應體：</strong><div class="rb mt-1" style="max-height:220px">'+hl(res.response_body)+'</div></div>' +
+      '</div></div></div></div>';
+  });
+  $('rptBody').innerHTML = h + '</div>';
+}
+
+// ══════════ INIT ══════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Pre-load global data
+  R('GET','/api/db/configs/').then(r=>{ if(r.code===0) S.dbs=r.data||[]; });
+  R('GET','/api/redis/configs/').then(r=>{ if(r.code===0) S.redis=r.data||[]; });
+  loadCats();
+  loadDash();
+  rdToggleFields();
+  // body type hint update
+  const apiBodyType = $('apiBodyType');
+  if (apiBodyType) apiBodyType.addEventListener('change', updBodyTypeHint);
+  const apiMth = $('apiMth');
+  if (apiMth) apiMth.addEventListener('change', togApiBody);
+});
+</script>
+</body>
+</html>
