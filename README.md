@@ -1,96 +1,96 @@
-# API 接口测试平台
+# API 接口測試平臺
 
-基于 **Django 5.1 + SQLite3** 的接口测试平台，支持 Python 3.13+。
-
----
-
-## 🚀 Windows 快速启动（推荐）
-
-### 前提条件
-- 安装 Python 3.13+（官网 https://www.python.org/downloads/）
-- 安装时 **勾选 "Add Python to PATH"**
-
-### 步骤
-
-**第一步：安装（只需执行一次）**
-
-双击 `setup.bat` → 自动创建虚拟环境、安装依赖、初始化数据库
-
-**第二步：启动**
-
-双击 `start.bat` → 浏览器打开 http://127.0.0.1:8000
+基于 **Django 5.1 + SQLite3** 的接口測試平臺，支持 Python 3.13+。
 
 ---
 
-## 🖥️ 手动安装（命令提示符）
+## 🚀 Windows 快速啓動（推薦）
+
+### 前提條件
+- 安裝 Python 3.13+（官網 https://www.python.org/downloads/）
+- 安裝时 **勾選 "Add Python to PATH"**
+
+### 步驟
+
+**第一步：安裝（只需執行一次）**
+
+双击 `setup.bat` → 自動創建虛擬環境、安裝依賴、初始化數據庫
+
+**第二步：啟動**
+
+雙擊 `start.bat` → 瀏覽器打開 http://127.0.0.1:8000
+
+---
+
+## 🖥️ 手動安裝（命令提示符）
 
 ```bat
-REM 进入项目目录
+REM 進入項目目錄
 cd api_test_platform
 
-REM 创建虚拟环境
+REM 創建虛擬環境
 python -m venv venv
 
-REM 激活虚拟环境
+REM 激活虛擬環境
 venv\Scripts\activate
 
-REM 安装依赖
+REM 安裝依賴
 pip install -r requirements.txt
 
-REM 初始化数据库
+REM 初始化數據庫
 python manage.py makemigrations
 python manage.py migrate
 
-REM 启动服务
+REM 啟動服務
 python manage.py runserver 0.0.0.0:8000
 ```
 
-浏览器访问：http://127.0.0.1:8000
+瀏覽器訪問：http://127.0.0.1:8000
 
 ---
 
-## ⚠️ Windows 常见问题
+## ⚠️ Windows 常見問題
 
-| 问题 | 解决方法 |
+| 問題 | 解決方法 |
 |------|----------|
-| `python` 不是内部命令 | Python 安装时未勾选 "Add to PATH"，重装并勾选 |
-| `pip` 安装超时 | 使用国内镜像：`pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `python` 不是內部命令 | Python 安裝時未勾選 "Add to PATH"，重裝並勾選 |
+| `pip` 安裝超時 | 使用國內鏡像：`pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple` |
 | 端口 8000 被占用 | 改用其他端口：`python manage.py runserver 0.0.0.0:8080` |
-| 双击 .bat 闪退 | 右键 → 以管理员身份运行；或在 CMD 中手动执行 |
-| 中文乱码 | CMD 执行 `chcp 65001` 切换 UTF-8 |
-| venv\Scripts\activate 报错 | PowerShell 需执行：`Set-ExecutionPolicy RemoteSigned` |
+| 雙擊 .bat 閃退 | 右鍵 → 以管理員身份運行；或在 CMD 中手動執行 |
+| 中文亂碼 | CMD 執行 `chcp 65001` 切換 UTF-8 |
+| venv\Scripts\activate 報錯 | PowerShell 需執行：`Set-ExecutionPolicy RemoteSigned` |
 
 ---
 
-## 📁 项目结构
+## 📁 項目結構
 
 ```
 api_test_platform\
-├── setup.bat                ← Windows 一键安装
-├── start.bat                ← Windows 一键启动
+├── setup.bat                ← Windows 一鍵安裝
+├── start.bat                ← Windows 一鍵啟動
 ├── manage.py
 ├── requirements.txt
-├── db.sqlite3               (运行后自动生成)
+├── db.sqlite3               (運行後自動生成)
 ├── api_test_platform\
 │   ├── settings.py
 │   ├── urls.py
 │   └── wsgi.py
 ├── apps\core\
-│   ├── models.py            数据模型
-│   ├── views.py             REST API 视图
+│   ├── models.py            數據模型
+│   ├── views.py             REST API 視圖
 │   ├── urls.py              路由
-│   └── executor.py          执行引擎
+│   └── executor.py          執行引擎
 └── templates\
-    └── index.html           前端单页应用
+    └── index.html           前端單頁應用
 ```
 
 ---
 
-## 🎯 功能说明
+## 🎯 功能說明
 
-### 全局变量 / Token
-- 生成 UUID / HEX32 / HEX64 / URLSafe Token 并保存为全局变量
-- 在接口 URL、Headers、Body 中用 `{{变量名}}` 引用
+### 全局變量 / Token
+- 生成 UUID / HEX32 / HEX64 / URLSafe Token 並保存為全局變量
+- 在接口 URL、Headers、Body 中用 `{{變量名}}` 引用
 
 ```
 URL:     https://api.example.com/{{env}}/user
