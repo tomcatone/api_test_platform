@@ -423,6 +423,9 @@ def _api_to_dict(api, brief=True):
             'timeout': api.timeout,
             'ssl_verify': getattr(api, 'ssl_verify', 'true') or 'true',
             'ssl_cert':   getattr(api, 'ssl_cert', '') or '',
+            'client_cert_enabled': bool(getattr(api, 'client_cert_enabled', False)),
+            'client_cert':         getattr(api, 'client_cert', '') or '',
+            'client_key':          getattr(api, 'client_key', '') or '',
             'pre_sql_db_id': api.pre_sql_db_id,
             'pre_sql': api.pre_sql,
             'post_sql_db_id': api.post_sql_db_id,
@@ -480,6 +483,9 @@ def _create_or_update_api(api, body):
         'timeout': int(body.get('timeout', 30)),
         'ssl_verify': body.get('ssl_verify', 'true') or 'true',
         'ssl_cert':   body.get('ssl_cert', '') or '',
+        'client_cert_enabled': bool(body.get('client_cert_enabled', False)),
+        'client_cert':         body.get('client_cert', '') or '',
+        'client_key':          body.get('client_key', '') or '',
         'pre_sql_db_id': body.get('pre_sql_db_id') or None,
         'pre_sql': body.get('pre_sql', ''),
         'post_sql_db_id': body.get('post_sql_db_id') or None,
@@ -617,7 +623,8 @@ def ssl_cert_upload(request):
     cert_dir = os.path.join(settings.BASE_DIR, 'certs')
     os.makedirs(cert_dir, exist_ok=True)
     import time as _t
-    safe_name = f'{int(_t.time())}_{f.name.replace(" ", "_")}'
+    raw_name  = os.path.basename(f.name.replace('\\', '/'))   # 防路徑穿越
+    safe_name = f'{int(_t.time())}_{raw_name.replace(" ", "_")}'
     cert_path = os.path.join(cert_dir, safe_name)
     with open(cert_path, 'wb') as fp:
         for chunk in f.chunks():
@@ -627,22 +634,180 @@ def ssl_cert_upload(request):
 
 @csrf_exempt
 def ssl_cert_list(request):
-    """GET /api/ssl/certs/ — 列出已上傳的證書"""
+    """GET /api/ssl/certs/ — 列出已上傳的證書，按上傳時間降序（最新在前）"""
     import os
     from django.conf import settings
     cert_dir = os.path.join(settings.BASE_DIR, 'certs')
     if not os.path.isdir(cert_dir):
         return success({'items': []})
     items = []
-    for name in sorted(os.listdir(cert_dir)):
+    for name in os.listdir(cert_dir):
         p = os.path.join(cert_dir, name)
         if os.path.isfile(p):
+            mtime = os.path.getmtime(p)
             items.append({
                 'filename': name,
                 'path':     p,
                 'size':     os.path.getsize(p),
+                'mtime':    int(mtime),            # Unix 時間戳（前端排序用）
             })
+    # 按修改時間降序：最新上傳的在最前面
+    items.sort(key=lambda x: x['mtime'], reverse=True)
     return success({'items': items})
+
+
+@csrf_exempt
+def ssl_cert_delete(request):
+    """
+    DELETE /api/ssl/cert/delete/
+    Body: { "filename": "xxx.pem" }
+    只允許刪除 certs/ 目錄內的文件，防止路徑穿越攻擊
+    """
+    if request.method != 'DELETE':
+        return error('方法不允許')
+    import os
+    from django.conf import settings
+    body = parse_body(request)
+    filename = body.get('filename', '').strip()
+    if not filename:
+        return error('請提供要刪除的證書文件名')
+
+    # 安全校驗：只允許文件名，不允許路徑分隔符（防止目錄穿越）
+    if os.sep in filename or '/' in filename or '..' in filename:
+        return error('非法文件名')
+
+    cert_dir = os.path.join(settings.BASE_DIR, 'certs')
+    cert_path = os.path.join(cert_dir, filename)
+
+    # 再次確認目標路徑在 certs/ 目錄內（二次防穿越）
+    real_path = os.path.realpath(cert_path)
+    real_dir  = os.path.realpath(cert_dir)
+    if not real_path.startswith(real_dir + os.sep):
+        return error('非法路徑')
+
+    if not os.path.isfile(real_path):
+        return error(f'證書文件不存在：{filename}')
+
+    os.remove(real_path)
+    return success(message=f'證書 {filename} 已刪除')
+
+
+# ═══════════════════════════════════════════════
+#  客戶端證書（mTLS）管理
+#  目錄：client_certs/  子目錄：certs/ key/
+# ═══════════════════════════════════════════════
+
+def _get_client_cert_dir():
+    import os
+    from django.conf import settings
+    d = os.path.join(settings.BASE_DIR, 'client_certs')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+@csrf_exempt
+def client_cert_upload(request):
+    """
+    POST /api/ssl/client-cert/upload/
+    field: file=<文件>  type=cert|key
+    cert 支持 .pem/.crt/.cer，key 支持 .pem/.key
+    """
+    if request.method != 'POST':
+        return error('方法不允許')
+    import os, time as _t
+    f = request.FILES.get('file')
+    if not f:
+        return error('請選擇文件')
+    file_type = request.POST.get('type', 'cert')   # 'cert' 或 'key'
+    if file_type not in ('cert', 'key'):
+        return error('type 必須為 cert 或 key')
+
+    ext = os.path.splitext(f.name)[1].lower()
+    if file_type == 'cert':
+        allowed = {'.pem', '.crt', '.cer', '.p12', '.pfx'}
+        if ext not in allowed:
+            return error(f'客戶端證書不支持 {ext}，請上傳 .pem/.crt/.cer 文件')
+    else:
+        allowed = {'.pem', '.key', '.p8'}
+        if ext not in allowed:
+            return error(f'私鑰不支持 {ext}，請上傳 .pem/.key 文件')
+
+    if f.size > 1024 * 256:  # 256 KB 上限
+        return error('文件不能超過 256 KB')
+
+    cert_dir = _get_client_cert_dir()
+    subdir = os.path.join(cert_dir, file_type)  # client_certs/cert/ 或 client_certs/key/
+    os.makedirs(subdir, exist_ok=True)
+
+    raw_name = os.path.basename(f.name.replace('\\', '/'))   # 防路徑穿越：取純文件名
+    safe_name = f'{int(_t.time())}_{raw_name.replace(" ", "_")}'
+    save_path = os.path.join(subdir, safe_name)
+    with open(save_path, 'wb') as fp:
+        for chunk in f.chunks():
+            fp.write(chunk)
+    return success({'path': save_path, 'filename': safe_name, 'type': file_type},
+                   f'{"客戶端證書" if file_type == "cert" else "私鑰"}上傳成功')
+
+
+@csrf_exempt
+def client_cert_list(request):
+    """GET /api/ssl/client-certs/ — 列出客戶端證書和私鑰，按 mtime 降序"""
+    import os
+    cert_dir = _get_client_cert_dir()
+    result = {'certs': [], 'keys': []}
+    for kind in ('cert', 'key'):
+        subdir = os.path.join(cert_dir, kind)
+        if not os.path.isdir(subdir):
+            continue
+        items = []
+        for name in os.listdir(subdir):
+            p = os.path.join(subdir, name)
+            if os.path.isfile(p):
+                items.append({
+                    'filename': name,
+                    'path':     p,
+                    'size':     os.path.getsize(p),
+                    'mtime':    int(os.path.getmtime(p)),
+                    'type':     kind,
+                })
+        items.sort(key=lambda x: x['mtime'], reverse=True)
+        result[f'{kind}s'] = items
+    return success(result)
+
+
+@csrf_exempt
+def client_cert_delete(request):
+    """
+    DELETE /api/ssl/client-cert/delete/
+    Body: { "filename": "xxx.pem", "type": "cert"|"key" }
+    """
+    if request.method != 'DELETE':
+        return error('方法不允許')
+    import os
+    body = parse_body(request)
+    filename  = body.get('filename', '').strip()
+    file_type = body.get('type', '').strip()
+    if not filename:
+        return error('請提供文件名')
+    if file_type not in ('cert', 'key'):
+        return error('type 必須為 cert 或 key')
+    if os.sep in filename or '/' in filename or '..' in filename:
+        return error('非法文件名')
+
+    cert_dir  = _get_client_cert_dir()
+    subdir    = os.path.join(cert_dir, file_type)
+    file_path = os.path.join(subdir, filename)
+
+    # 路徑穿越二次防禦
+    real_path = os.path.realpath(file_path)
+    real_dir  = os.path.realpath(subdir)
+    if not real_path.startswith(real_dir + os.sep):
+        return error('非法路徑')
+
+    if not os.path.isfile(real_path):
+        return error(f'文件不存在：{filename}')
+    os.remove(real_path)
+    return success(message=f'{"客戶端證書" if file_type == "cert" else "私鑰"} {filename} 已刪除')
 
 
 def report_list(request):

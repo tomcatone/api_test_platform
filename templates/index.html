@@ -28,6 +28,15 @@
 .sb-user-actions{display:flex;gap:6px}
 .sb-action-btn{flex:1;padding:5px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#a5b4fc;border-radius:6px;cursor:pointer;font-size:.75rem;transition:all .15s}
 .sb-action-btn:hover{background:rgba(99,102,241,.3);color:#fff;border-color:rgba(99,102,241,.5)}
+.ssl-cert-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;transition:background .12s;user-select:none}
+.ssl-cert-item:hover{background:rgba(99,102,241,.08)}
+.ssl-cert-item.selected{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.35)}
+.ssl-cert-item:not(.selected){border:1px solid transparent}
+.ssl-cert-radio{width:15px;height:15px;accent-color:#6366f1;flex-shrink:0;cursor:pointer}
+.ssl-cert-name{flex:1;font-family:monospace;font-size:.78rem;word-break:break-all;color:#1e293b}
+.ssl-cert-size{font-size:.72rem;color:#94a3b8;flex-shrink:0}
+.ssl-cert-del{background:none;border:none;color:#cbd5e1;padding:2px 5px;border-radius:4px;cursor:pointer;flex-shrink:0;transition:color .12s}
+.ssl-cert-del:hover{color:#ef4444}
 .main{margin-left:var(--sw);padding:20px;min-height:100vh}
 .page{display:none}.page.active{display:block}
 .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e2e8f0}
@@ -452,7 +461,7 @@
       <div class="col-md-3"><label class="form-label">分類</label><select class="form-select" id="apiCat"><option value="">未分類</option></select></div>
       <div class="col-md-2"><label class="form-label">排序</label><input type="number" class="form-control" id="apiSort" value="0"></div>
       <div class="col-md-2"><label class="form-label">超時(秒)</label><input type="number" class="form-control" id="apiTimeout" value="30" min="1"></div>
-      <div class="col-md-2"><label class="form-label">HTTP方法 *</label><select class="form-select" id="apiMth" onchange="togApiBody()"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option></select></div>
+      <div class="col-md-2"><label class="form-label">HTTP方法 *</label><select class="form-select" id="apiMth" onchange="togApiBody()"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option><option>HEAD</option><option>OPTIONS</option></select></div>
       <div class="col-md-3" id="ctWrap"><label class="form-label">Body類型</label>
         <select class="form-select" id="apiBodyType">
           <option value="json">JSON &nbsp;→&nbsp; json=body</option>
@@ -577,28 +586,80 @@
           </div>
         </div>
         <div id="sslCertSection" style="display:none">
-          <div class="fst mb-2">自定義 CA 證書 <small class="text-muted fw-normal">（支持 .pem / .crt / .cer）</small></div>
-          <div class="row g-2 mb-2">
-            <div class="col-12">
-              <select class="form-select form-select-sm" id="apiSslCert" style="font-family:monospace">
-                <option value="">— 請選擇已上傳的證書 —</option>
-              </select>
+          <div class="fst mb-2">自定義 CA 證書 <small class="text-muted fw-normal">（支持 .pem / .crt / .cer，單選）</small></div>
+
+          <!-- 證書列表：Radio 單選 -->
+          <div class="border rounded mb-2" id="sslCertListWrap" style="max-height:180px;overflow-y:auto;background:#fafafa">
+            <div id="sslCertItems" style="padding:4px 2px">
+              <div class="text-center text-muted py-2 small">加載中...</div>
             </div>
           </div>
-          <div class="d-flex gap-2 align-items-center">
-            <label class="btn btn-sm btn-outline-primary mb-0" for="sslCertFile">
-              <i class="fas fa-upload me-1"></i>上傳新證書
+
+          <!-- 當前選中路徑（隱藏，供後端保存用） -->
+          <input type="hidden" id="apiSslCertPath" value="">
+
+          <!-- 選中狀態展示 + 上傳/刷新 -->
+          <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+            <div class="flex-fill small text-truncate" id="sslSelectedLabel"
+                 style="color:#6366f1;min-width:0;font-family:monospace">
+              <i class="fas fa-shield-alt me-1 text-muted"></i>未選擇證書
+            </div>
+            <label class="btn btn-sm btn-outline-primary mb-0 flex-shrink-0" for="sslCertFile">
+              <i class="fas fa-upload me-1"></i>上傳
             </label>
             <input type="file" id="sslCertFile" accept=".pem,.crt,.cer,.ca-bundle" style="display:none" onchange="uploadSslCert(this)">
-            <button class="btn btn-sm btn-outline-secondary" onclick="loadSslCerts()">
-              <i class="fas fa-sync fa-xs me-1"></i>刷新列表
+            <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="loadSslCerts()">
+              <i class="fas fa-sync fa-xs"></i>
             </button>
-            <span class="text-muted small" id="sslUploadStatus"></span>
           </div>
-          <div class="mt-2">
-            <label class="form-label form-label-sm">或手動輸入證書路徑</label>
-            <input type="text" class="form-control form-control-sm ca" id="apiSslCertPath"
-              placeholder="/path/to/ca-bundle.pem（選擇上傳後自動填入）">
+          <div id="sslUploadStatus" class="small text-muted" style="min-height:18px"></div>
+        </div>
+
+        <!-- ── mTLS 客戶端證書區塊 ── -->
+        <hr class="my-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="fst mb-0">客戶端證書 <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem">mTLS</span></div>
+          <div class="form-check form-switch ms-auto mb-0">
+            <input class="form-check-input" type="checkbox" id="apiClientCertEnabled" onchange="togMtls()">
+            <label class="form-check-label small" for="apiClientCertEnabled">啟用雙向認證</label>
+          </div>
+        </div>
+        <div class="text-muted small mb-2">服務端要求驗證客戶端身份時使用。需提供客戶端證書和私鑰。</div>
+        <div id="mtlsSection" style="display:none">
+          <!-- 客戶端證書 -->
+          <div class="border rounded p-2 mb-2" style="background:#fafff9">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="small fw-bold text-success"><i class="fas fa-id-card me-1"></i>客戶端證書 (.pem/.crt)</span>
+              <label class="btn btn-outline-success btn-sm mb-0 ms-auto py-0" for="mtlsCertFile">
+                <i class="fas fa-upload fa-xs me-1"></i>上傳
+              </label>
+              <input type="file" id="mtlsCertFile" accept=".pem,.crt,.cer" style="display:none" onchange="uploadClientFile(this,'cert')">
+              <button class="btn btn-outline-secondary btn-sm py-0" onclick="loadClientCerts('cert')"><i class="fas fa-sync fa-xs"></i></button>
+            </div>
+            <div id="mtlsCertItems" class="border rounded" style="max-height:120px;overflow-y:auto;background:#fff;min-height:32px">
+              <div class="text-center text-muted py-1 small">暫無證書</div>
+            </div>
+            <input type="hidden" id="apiClientCertPath" value="">
+            <div class="small text-muted mt-1" id="mtlsCertLabel"><i class="fas fa-circle-notch text-muted me-1"></i>未選擇</div>
+          </div>
+          <!-- 客戶端私鑰 -->
+          <div class="border rounded p-2 mb-2" style="background:#fffaf9">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="small fw-bold text-danger"><i class="fas fa-key me-1"></i>客戶端私鑰 (.pem/.key)</span>
+              <label class="btn btn-outline-danger btn-sm mb-0 ms-auto py-0" for="mtlsKeyFile">
+                <i class="fas fa-upload fa-xs me-1"></i>上傳
+              </label>
+              <input type="file" id="mtlsKeyFile" accept=".pem,.key,.p8" style="display:none" onchange="uploadClientFile(this,'key')">
+              <button class="btn btn-outline-secondary btn-sm py-0" onclick="loadClientCerts('key')"><i class="fas fa-sync fa-xs"></i></button>
+            </div>
+            <div id="mtlsKeyItems" class="border rounded" style="max-height:120px;overflow-y:auto;background:#fff;min-height:32px">
+              <div class="text-center text-muted py-1 small">暫無私鑰</div>
+            </div>
+            <input type="hidden" id="apiClientKeyPath" value="">
+            <div class="small text-muted mt-1" id="mtlsKeyLabel"><i class="fas fa-circle-notch text-muted me-1"></i>未選擇</div>
+          </div>
+          <div class="form-text text-info">
+            <i class="fas fa-info-circle me-1"></i>若證書和私鑰合併在同一 .pem 文件，只需上傳並選中證書，私鑰留空。
           </div>
         </div>
       </div>
@@ -1059,7 +1120,12 @@ function clearApiForm() {
   $('apiEncAlgo').value=''; $('apiEncKey').value='';
   const sv = $('apiSslVerify'); if(sv) sv.value='true';
   const sc = $('apiSslCertPath'); if(sc) sc.value='';
-  togSslCert();
+  if (typeof _updateSslSelectedLabel === 'function') _updateSslSelectedLabel('');
+  const cce = $('apiClientCertEnabled'); if(cce) cce.checked=false;
+  const cc = $('apiClientCertPath'); if(cc) cc.value='';
+  const ck = $('apiClientKeyPath'); if(ck) ck.value='';
+  _updateMtlsLabel('cert',''); _updateMtlsLabel('key','');
+  togSslCert(); togMtls();
   $('globalEncSec').style.display='none'; $('fieldEncSec').style.display='none';
   $('encRules').innerHTML='';
   $('exRules').innerHTML=''; $('asRules').innerHTML='';
@@ -1094,7 +1160,15 @@ async function editApi(id) {
   $('apiEncAlgo').value=a.encryption_algorithm||'';
   const sv = $('apiSslVerify'); if(sv) sv.value = a.ssl_verify||'true';
   const sc = $('apiSslCertPath'); if(sc) sc.value = a.ssl_cert||'';
+  if (typeof _updateSslSelectedLabel === 'function') _updateSslSelectedLabel(a.ssl_cert||'');
   togSslCert();
+  // mTLS 客戶端證書
+  const cce = $('apiClientCertEnabled'); if(cce) cce.checked = !!a.client_cert_enabled;
+  const cc = $('apiClientCertPath'); if(cc) cc.value = a.client_cert||'';
+  const ck = $('apiClientKeyPath'); if(ck) ck.value = a.client_key||'';
+  _updateMtlsLabel('cert', a.client_cert||'');
+  _updateMtlsLabel('key', a.client_key||'');
+  togMtls();
   $('apiEncKey').value=a.encryption_key||'';
   togEncMode();
   $('apiPreSql').value=a.pre_sql||''; $('apiPostSql').value=a.post_sql||'';
@@ -1114,9 +1188,24 @@ async function editApi(id) {
   bootstrap.Modal.getOrCreateInstance($('apiModal')).show();
 }
 function togApiBody() {
-  const isPost = ['POST','PUT','PATCH','DELETE'].includes($('apiMth').value);
-  $('tBli').style.display = isPost ? '' : 'none';
-  $('ctWrap').style.display = isPost ? '' : 'none';
+  const mth = $('apiMth').value;
+  // HEAD/OPTIONS 通常無 Request Body（HTTP 規範）
+  const noBody = ['HEAD', 'OPTIONS'].includes(mth);
+  const isPost = ['POST','PUT','PATCH','DELETE'].includes(mth);
+  $('tBli').style.display  = (isPost && !noBody) ? '' : 'none';
+  $('ctWrap').style.display = (isPost && !noBody) ? '' : 'none';
+  // HEAD/OPTIONS 顯示提示
+  let hint = $('noBodyHint');
+  if (!hint && noBody) {
+    hint = document.createElement('div');
+    hint.id = 'noBodyHint';
+    hint.className = 'text-muted small mt-1';
+    hint.innerHTML = '<i class="fas fa-info-circle me-1"></i>' + mth + ' 方法通常無 Request Body';
+    $('tBli')?.parentNode?.insertBefore(hint, $('tBli'));
+  } else if (hint) {
+    hint.style.display = noBody ? '' : 'none';
+    if (noBody) hint.innerHTML = '<i class="fas fa-info-circle me-1"></i>' + mth + ' 方法通常無 Request Body';
+  }
 }
 function updBodyTypeHint() {
   const bt = $('apiBodyType')?.value || 'json';
@@ -1175,13 +1264,108 @@ function togSslCert() {
 async function loadSslCerts() {
   const r = await R('GET', '/api/ssl/certs/');
   if (r.code !== 0) return;
-  const sel = $('apiSslCert');
-  if (!sel) return;
   const items = r.data.items || [];
-  const cur = $('apiSslCertPath')?.value || '';
-  sel.innerHTML = '<option value="">— 請選擇已上傳的證書 —</option>' +
-    items.map(c => '<option value="'+eh(c.path)+'"'+(c.path===cur?' selected':'')+'>'+eh(c.filename)+'</option>').join('');
-  sel.onchange = () => { const p=$('apiSslCertPath'); if(p) p.value=sel.value; };
+  const wrap = $('sslCertItems');
+  if (!wrap) return;
+
+  if (!items.length) {
+    wrap.innerHTML = '<div class="text-center text-muted py-3 small"><i class="fas fa-folder-open me-1"></i>暫無證書，請上傳</div>';
+    _updateSslSelectedLabel('');
+    return;
+  }
+
+  let curPath = $('apiSslCertPath')?.value || '';
+
+  // ── 默認選最新：curPath 為空時自動選第一條（後端已按 mtime 降序）──
+  if (!curPath && items.length > 0) {
+    curPath = items[0].path;
+    const p = $('apiSslCertPath'); if (p) p.value = curPath;
+  }
+
+  const fmtSize = b => b < 1024 ? b + 'B' : (b / 1024).toFixed(1) + 'KB';
+  const fmtTime = ts => {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  };
+
+  wrap.innerHTML = items.map((c, idx) => {
+    const sel = c.path === curPath;
+    return (
+      '<div class="ssl-cert-item' + (sel ? ' selected' : '') + '" id="ssl-row-' + idx + '">' +
+        '<input class="ssl-cert-radio" type="radio" name="sslCertRadio" ' +
+          'id="ssl-radio-' + idx + '" value="' + eh(c.path) + '" ' +
+          (sel ? 'checked' : '') +
+          ' onchange="onSslRadioChange(this,\'' + eh(c.filename) + '\')">' +
+        '<label class="ssl-cert-name" for="ssl-radio-' + idx + '" title="' + eh(c.path) + '">' +
+          (idx === 0 ? '<span class="badge bg-success me-1" style="font-size:.58rem;vertical-align:middle">最新</span>' : '') +
+          eh(c.filename) +
+        '</label>' +
+        '<span class="ssl-cert-size text-muted">' + fmtSize(c.size) +
+          (c.mtime ? ' · ' + fmtTime(c.mtime) : '') +
+        '</span>' +
+        '<button class="ssl-cert-del" onclick="deleteSslCert(\'' + eh(c.filename) + '\',\'' + eh(c.path) + '\')" title="刪除">' +
+          '<i class="fas fa-trash fa-xs"></i>' +
+        '</button>' +
+      '</div>'
+    );
+  }).join('');
+
+  _updateSslSelectedLabel(curPath, items);
+}
+
+// Radio 切換：純 DOM 操作，不需要重新請求接口
+function onSslRadioChange(radio, filename) {
+  const path = radio.value;
+  const p = $('apiSslCertPath'); if (p) p.value = path;
+  // 更新所有行高亮（保證只有一行選中）
+  document.querySelectorAll('.ssl-cert-item').forEach(row => {
+    const rb = row.querySelector('input[type="radio"]');
+    if (rb) row.classList.toggle('selected', rb.checked);
+  });
+  _updateSslSelectedLabel(path, null, filename);
+}
+
+function _updateSslSelectedLabel(path, items, filename) {
+  const lbl = $('sslSelectedLabel'); if (!lbl) return;
+  if (!path) {
+    lbl.innerHTML = '<i class="fas fa-shield-alt me-1 text-muted"></i>未選擇證書';
+    return;
+  }
+  let name = filename;
+  if (!name && items) {
+    const found = items.find(c => c.path === path);
+    name = found ? found.filename : path.split('/').pop();
+  }
+  if (!name) name = path.split('/').pop() || path;
+  lbl.innerHTML = '<i class="fas fa-check-circle me-1 text-success"></i>' +
+    '<span title="' + eh(path) + '">' + eh(name) + '</span>';
+}
+
+// 整行點擊觸發（label 已處理大部分，這裡備用於行點擊）
+function selectSslCert(path, filename) {
+  const p = $('apiSslCertPath'); if (p) p.value = path;
+  document.querySelectorAll('input[name="sslCertRadio"]').forEach(rb => {
+    rb.checked = (rb.value === path);
+    rb.closest('.ssl-cert-item')?.classList.toggle('selected', rb.checked);
+  });
+  _updateSslSelectedLabel(path, null, filename);
+}
+
+async function deleteSslCert(filename, path) {
+  if (!confirm('確認刪除證書「' + filename + '」？\n\n已使用此證書的接口需要重新選擇。')) return;
+  const r = await R('DELETE', '/api/ssl/cert/delete/', { filename });
+  if (r.code === 0) {
+    toast('證書已刪除');
+    const p = $('apiSslCertPath');
+    if (p && p.value === path) {
+      p.value = '';
+      _updateSslSelectedLabel('');
+    }
+    await loadSslCerts();
+  } else {
+    toast(r.message, 'danger');
+  }
 }
 
 async function uploadSslCert(input) {
@@ -1196,17 +1380,153 @@ async function uploadSslCert(input) {
     if (data.code === 0) {
       toast('證書上傳成功：' + data.data.filename);
       if (status) status.textContent = '✓ ' + data.data.filename;
+      // 自動選中剛上傳的證書
       const p = $('apiSslCertPath'); if (p) p.value = data.data.path;
       await loadSslCerts();
-      const sel = $('apiSslCert'); if (sel) sel.value = data.data.path;
     } else {
       toast(data.message, 'danger');
       if (status) status.textContent = '✗ 上傳失敗';
     }
-  } catch(e) {
-    toast('上傳失敗: ' + e.message, 'danger');
+  } catch(err) {
+    toast('上傳失敗: ' + err.message, 'danger');
+    if (status) status.textContent = '✗ 網絡錯誤';
   }
   input.value = '';
+}
+
+// ══════════ mTLS 客戶端證書 ══════════
+function togMtls() {
+  const enabled = !!$('apiClientCertEnabled')?.checked;
+  const sec = $('mtlsSection');
+  if (sec) {
+    sec.style.display = enabled ? '' : 'none';
+    if (enabled) {
+      loadClientCerts('cert');
+      loadClientCerts('key');
+    }
+  }
+}
+
+async function loadClientCerts(kind) {
+  // kind: 'cert' | 'key'
+  const r = await R('GET', '/api/ssl/client-certs/');
+  if (r.code !== 0) return;
+  const items = (kind === 'cert' ? r.data.certs : r.data.keys) || [];
+  const container = $(kind === 'cert' ? 'mtlsCertItems' : 'mtlsKeyItems');
+  if (!container) return;
+
+  const curPath = $(kind === 'cert' ? 'apiClientCertPath' : 'apiClientKeyPath')?.value || '';
+
+  let autoPath = curPath;
+  if (!autoPath && items.length > 0) {
+    autoPath = items[0].path;
+    const inp = $(kind === 'cert' ? 'apiClientCertPath' : 'apiClientKeyPath');
+    if (inp) inp.value = autoPath;
+    _updateMtlsLabel(kind, autoPath, items);
+  }
+
+  if (!items.length) {
+    container.innerHTML = '<div class="text-center text-muted py-1 small">暫無文件</div>';
+    return;
+  }
+
+  const fmtTime = ts => {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  };
+  const fmtSize = b => b < 1024 ? b+'B' : (b/1024).toFixed(1)+'KB';
+
+  container.innerHTML = items.map((c, idx) => {
+    const sel = c.path === autoPath;
+    const radioName = `mtls${kind}Radio`;
+    return (
+      '<div class="d-flex align-items-center gap-1 px-2 py-1' + (sel ? ' bg-light-success' : '') +
+      '" style="' + (sel ? 'background:#f0fff4;' : '') + 'cursor:pointer" onclick="selectMtlsFile(\'' +
+      eh(c.path) + '\',\'' + kind + '\',\'' + eh(c.filename) + '\')">' +
+        '<input type="radio" name="' + radioName + '" value="' + eh(c.path) + '"' +
+          (sel ? ' checked' : '') +
+          ' onchange="selectMtlsFile(\'' + eh(c.path) + '\',\'' + kind + '\',\'' + eh(c.filename) + '\')"' +
+          ' onclick="event.stopPropagation()">' +
+        '<span class="small flex-fill text-truncate" style="font-family:monospace;font-size:.75rem" title="' + eh(c.path) + '">' +
+          (idx === 0 ? '<span class="badge bg-success me-1" style="font-size:.55rem">最新</span>' : '') +
+          eh(c.filename) +
+        '</span>' +
+        '<span class="text-muted" style="font-size:.7rem;white-space:nowrap">' + fmtSize(c.size) + ' ' + fmtTime(c.mtime) + '</span>' +
+        '<button class="btn btn-outline-danger btn-sm bi py-0" style="font-size:.65rem" ' +
+          'onclick="event.stopPropagation();deleteClientFile(\'' + eh(c.filename) + '\',\'' + kind + '\',\'' + eh(c.path) + '\')" title="刪除">' +
+          '<i class="fas fa-trash fa-xs"></i>' +
+        '</button>' +
+      '</div>'
+    );
+  }).join('');
+
+  _updateMtlsLabel(kind, autoPath, items);
+}
+
+function selectMtlsFile(path, kind, filename) {
+  const inp = $(kind === 'cert' ? 'apiClientCertPath' : 'apiClientKeyPath');
+  if (inp) inp.value = path;
+  document.querySelectorAll(`input[name="mtls${kind}Radio"]`).forEach(rb => {
+    rb.checked = (rb.value === path);
+  });
+  _updateMtlsLabel(kind, path, null, filename);
+}
+
+function _updateMtlsLabel(kind, path, items, filename) {
+  const lbl = $(kind === 'cert' ? 'mtlsCertLabel' : 'mtlsKeyLabel');
+  if (!lbl) return;
+  if (!path) {
+    lbl.innerHTML = '<i class="fas fa-circle-notch text-muted me-1"></i>未選擇';
+    return;
+  }
+  let name = filename;
+  if (!name && items) {
+    const found = items.find(c => c.path === path);
+    name = found ? found.filename : path.split('/').pop();
+  }
+  if (!name) name = path.split('/').pop() || path;
+  const icon = kind === 'cert' ? 'fas fa-id-card text-success' : 'fas fa-key text-danger';
+  lbl.innerHTML = '<i class="' + icon + ' me-1"></i><span title="' + eh(path) + '">' + eh(name) + '</span>';
+}
+
+async function uploadClientFile(input, kind) {
+  const f = input.files[0]; if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('type', kind);
+  try {
+    const res = await fetch('/api/ssl/client-cert/upload/', {method:'POST', body:fd, credentials:'same-origin'});
+    const data = await res.json();
+    if (data.code === 0) {
+      toast(data.message || '上傳成功');
+      const inp = $(kind === 'cert' ? 'apiClientCertPath' : 'apiClientKeyPath');
+      if (inp) inp.value = data.data.path;
+      await loadClientCerts(kind);
+    } else {
+      toast(data.message, 'danger');
+    }
+  } catch(err) {
+    toast('上傳失敗: ' + err.message, 'danger');
+  }
+  input.value = '';
+}
+
+async function deleteClientFile(filename, kind, path) {
+  const label = kind === 'cert' ? '客戶端證書' : '私鑰';
+  if (!confirm(`確認刪除${label}「${filename}」？`)) return;
+  const r = await R('DELETE', '/api/ssl/client-cert/delete/', {filename, type: kind});
+  if (r.code === 0) {
+    toast(r.message || '已刪除');
+    const inp = $(kind === 'cert' ? 'apiClientCertPath' : 'apiClientKeyPath');
+    if (inp && inp.value === path) {
+      inp.value = '';
+      _updateMtlsLabel(kind, '');
+    }
+    await loadClientCerts(kind);
+  } else {
+    toast(r.message, 'danger');
+  }
 }
 
 function togEncMode() {
@@ -1420,6 +1740,9 @@ function colApiData() {
     db_assertions:JSON.stringify(daRules),
     ssl_verify: $('apiSslVerify')?.value || 'true',
     ssl_cert:   ($('apiSslVerify')?.value === 'custom' ? ($('apiSslCertPath')?.value||'') : ''),
+    client_cert_enabled: !!$('apiClientCertEnabled')?.checked,
+    client_cert: ($('apiClientCertEnabled')?.checked ? ($('apiClientCertPath')?.value||'') : ''),
+    client_key:  ($('apiClientCertEnabled')?.checked ? ($('apiClientKeyPath')?.value||'') : ''),
     pre_sql_db_id:$('apiPreDb').value||null, pre_sql:$('apiPreSql').value,
     post_sql_db_id:$('apiPostDb').value||null, post_sql:$('apiPostSql').value,
     pre_redis_rules: JSON.stringify([...$('preRedisRules').querySelectorAll('.pre-redis-rule')].map(r=>({

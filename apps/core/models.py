@@ -169,7 +169,15 @@ class DatabaseConfig(models.Model):
 
 class ApiConfig(models.Model):
     """接口配置"""
-    METHOD_CHOICES = [('GET', 'GET'), ('POST', 'POST')]
+    METHOD_CHOICES = [
+        ('GET',     'GET'),
+        ('POST',    'POST'),
+        ('PUT',     'PUT'),
+        ('DELETE',  'DELETE'),
+        ('PATCH',   'PATCH'),
+        ('HEAD',    'HEAD'),
+        ('OPTIONS', 'OPTIONS'),
+    ]
     CONTENT_TYPE_CHOICES = [
         ('json',      'application/json'),
         ('form',      'application/x-www-form-urlencoded'),
@@ -200,6 +208,11 @@ class ApiConfig(models.Model):
     ]
     ssl_verify  = models.CharField(max_length=10, choices=SSL_VERIFY_CHOICES, default='true', verbose_name='SSL 驗證模式')
     ssl_cert    = models.CharField(max_length=500, blank=True, default='', verbose_name='自定義 CA 證書路徑')
+
+    # ── 客戶端證書（雙向 TLS / mTLS）──
+    client_cert_enabled = models.BooleanField(default=False, verbose_name='啟用客戶端證書 (mTLS)')
+    client_cert         = models.CharField(max_length=500, blank=True, default='', verbose_name='客戶端證書路徑 (.pem/.crt)')
+    client_key          = models.CharField(max_length=500, blank=True, default='', verbose_name='客戶端私鑰路徑 (.pem/.key)')
 
     # ── 變量提取規則 ──
     extract_vars = models.TextField(default='[]', verbose_name='提取變量規則 (JSON)')

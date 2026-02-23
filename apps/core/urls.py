@@ -48,8 +48,13 @@ urlpatterns = [
     path('reports/',           views.report_list,    name='report-list'),
     path('reports/<int:pk>/',  views.report_detail,  name='report-detail'),
     # SSL 證書
-    path('ssl/cert/upload/', views.ssl_cert_upload, name='ssl-cert-upload'),
-    path('ssl/certs/',       views.ssl_cert_list,   name='ssl-cert-list'),
+    path('ssl/cert/upload/',         views.ssl_cert_upload,    name='ssl-cert-upload'),
+    path('ssl/cert/delete/',         views.ssl_cert_delete,    name='ssl-cert-delete'),
+    path('ssl/certs/',               views.ssl_cert_list,      name='ssl-cert-list'),
+    # 客戶端證書 (mTLS)
+    path('ssl/client-cert/upload/',  views.client_cert_upload, name='client-cert-upload'),
+    path('ssl/client-cert/delete/',  views.client_cert_delete, name='client-cert-delete'),
+    path('ssl/client-certs/',        views.client_cert_list,   name='client-cert-list'),
     # 認證
     path('auth/login/',           views.auth_login_view,    name='auth-login'),
     path('auth/logout/',          views.auth_logout_view,   name='auth-logout'),

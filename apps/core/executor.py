@@ -456,10 +456,12 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
 # ── 同步請求（requests / Session）───────────────────
 
 def _do_sync_request(method, url, headers, params, body, body_type, timeout,
-                     use_session=False, api_id=None, ssl_verify=True):
+                     use_session=False, api_id=None, ssl_verify=True, client_cert=None):
     kw = _build_request_kwargs(method, url, headers, params, body, body_type, timeout)
     req_url = kw.pop('url')
-    kw['verify'] = ssl_verify   # True / False / '/path/to/cert.pem'
+    kw['verify'] = ssl_verify           # True / False / '/path/to/ca.pem'
+    if client_cert:
+        kw['cert'] = client_cert        # (cert_path, key_path) 或 combined_pem_path
     sess = _get_session(api_id) if (use_session and api_id) else requests
     resp = sess.request(method.upper(), req_url, **kw)
     return resp.status_code, dict(resp.headers), resp.text
@@ -468,7 +470,7 @@ def _do_sync_request(method, url, headers, params, body, body_type, timeout,
 # ── 異步請求（asyncio + httpx）──────────────────────
 
 async def _do_async_request(method, url, headers, params, body, body_type, timeout,
-                             ssl_verify=True):
+                             ssl_verify=True, client_cert=None):
     timeout_cfg = httpx.Timeout(connect=min(timeout, 10), read=timeout, write=timeout, pool=timeout)
     headers = dict(headers or {})
     params  = {k: v for k, v in (params or {}).items() if v not in ('', None)}
@@ -483,6 +485,22 @@ async def _do_async_request(method, url, headers, params, body, body_type, timeo
         _httpx_verify = False
     else:
         _httpx_verify = True
+
+    # mTLS 客戶端證書 (httpx 使用 ssl.SSLContext)
+    if client_cert:
+        import ssl as _ssl2
+        if isinstance(_httpx_verify, _ssl2.SSLContext):
+            _ctx_mtls = _httpx_verify
+        else:
+            _ctx_mtls = _ssl2.create_default_context() if _httpx_verify else _ssl2.SSLContext(_ssl2.PROTOCOL_TLS_CLIENT)
+            if not _httpx_verify:
+                _ctx_mtls.check_hostname = False
+                _ctx_mtls.verify_mode = _ssl2.CERT_NONE
+        if isinstance(client_cert, tuple) and len(client_cert) == 2:
+            _ctx_mtls.load_cert_chain(certfile=client_cert[0], keyfile=client_cert[1])
+        else:
+            _ctx_mtls.load_cert_chain(certfile=client_cert)
+        _httpx_verify = _ctx_mtls
 
     async with httpx.AsyncClient(timeout=timeout_cfg, verify=_httpx_verify) as client:
         # 過濾 _raw，並處理純字符串 params
@@ -677,6 +695,22 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
     else:
         ssl_verify = True           # 默認驗證
 
+    # ── mTLS 客戶端證書 ──
+    client_cert = None
+    if getattr(api_config, 'client_cert_enabled', False):
+        _ccert = (getattr(api_config, 'client_cert', '') or '').strip()
+        _ckey  = (getattr(api_config, 'client_key',  '') or '').strip()
+        import os as _os2
+        if _ccert:
+            if not _os2.path.isfile(_ccert):
+                raise FileNotFoundError(f'mTLS 客戶端證書文件不存在：{_ccert}')
+            if _ckey:
+                if not _os2.path.isfile(_ckey):
+                    raise FileNotFoundError(f'mTLS 客戶端私鑰文件不存在：{_ckey}')
+                client_cert = (_ccert, _ckey)   # (cert, key) 分離格式
+            else:
+                client_cert = _ccert             # PEM 合併格式（cert+key 在同一個文件）
+
     # ── Body 字段級加密（AES-GCM per-field）──
     body_enc_rules = api_config.get_body_enc_rules() if hasattr(api_config, 'get_body_enc_rules') else []
     enc_key        = getattr(api_config, 'encryption_key', '') or ''
@@ -721,12 +755,13 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
         if use_async:
             response_status, response_headers, response_body = _run_async_coro(
                 _do_async_request(api_config.method, url, headers, params, body, body_type, timeout,
-                                  ssl_verify=ssl_verify)
+                                  ssl_verify=ssl_verify, client_cert=client_cert)
             )
         else:
             response_status, response_headers, response_body = _do_sync_request(
                 api_config.method, url, headers, params, body, body_type, timeout,
-                use_session=use_session, api_id=api_config.id, ssl_verify=ssl_verify
+                use_session=use_session, api_id=api_config.id, ssl_verify=ssl_verify,
+                client_cert=client_cert
             )
         try:
             response_data = json.loads(response_body)
