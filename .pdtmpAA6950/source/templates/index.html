@@ -108,15 +108,6 @@
 .locust-stat{text-align:center;background:#f8fafc;border-radius:9px;padding:12px 8px}
 .locust-stat .val{font-size:1.3rem;font-weight:700;color:#1e293b}
 .locust-stat .lbl{font-size:.72rem;color:#64748b}
-.lst-kpi{border-radius:12px;padding:16px 12px;text-align:center;color:#fff;flex:1}
-.lst-kpi .kv{font-size:1.6rem;font-weight:800;line-height:1.1}
-.lst-kpi .kl{font-size:.72rem;opacity:.85;margin-top:2px}
-.lst-pct-bar{height:10px;border-radius:5px;background:#e2e8f0;overflow:hidden;margin:3px 0}
-.lst-pct-bar .fill{height:100%;border-radius:5px;transition:width .6s}
-.lst-ep-row td{vertical-align:middle;font-size:.78rem}
-.lst-grade{display:inline-block;font-size:1.1rem;font-weight:800;border-radius:50%;width:36px;height:36px;line-height:36px;text-align:center}
-.lst-timeline{display:flex;align-items:flex-end;gap:2px;height:48px;margin:4px 0}
-.lst-timeline .bar{flex:1;border-radius:3px 3px 0 0;min-height:4px;transition:height .4s}
 .pulse{animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 </style>
@@ -425,13 +416,8 @@
         <div class="card-body" id="lstStatusBody">
           <div class="text-center text-muted py-4"><i class="fas fa-bug fa-2x mb-2 d-block text-muted"></i>選擇接口並點擊「開始壓測」</div>
         </div></div>
-      <div class="card" id="lstResultCard" style="display:none">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span><i class="fas fa-chart-bar me-2 text-primary"></i>壓測結果報告</span>
-          <div id="lstGradeBox"></div>
-        </div>
-        <div class="card-body p-3" id="lstResultBody"></div>
-      </div>
+      <div class="card" id="lstResultCard" style="display:none"><div class="card-header">壓測結果</div>
+        <div class="card-body" id="lstResultBody"></div></div>
     </div>
   </div>
 </div>
@@ -2589,9 +2575,6 @@ function lstPollStatus() {
       $('lstStartBtn').style.display=''; $('lstStopBtn').style.display='none';
       $('lstStatusBadge').className='badge bg-'+(d.status==='completed'?'success':'danger');
       $('lstStatusBadge').textContent = statusMap[d.status]||d.status;
-      if (d.status==='error'&&d.error) {
-        $('lstStatusBody').innerHTML += '<div class="alert alert-danger mt-2 p-2" style="font-size:.75rem;white-space:pre-wrap;text-align:left"><strong>錯誤日誌：</strong>\n'+eh(d.error)+'</div>';
-      }
       if (d.status==='completed') lstCollect();
     }
   }, 1500);
@@ -2610,199 +2593,24 @@ async function lstCollect() {
   const rname = $('lstRptName').value.trim() || '';
   const r = await R('POST','/api/locust/collect/'+S.lstTaskId+'/',{report_name:rname});
   if (!r.data?.success) { toast(r.data?.message||'收集結果失敗','warning'); return; }
-  const s = r.data.stats;
-  const rid = r.data.report_id;
-
-  // ── 性能評級 ──────────────────────────────────────
-  function grade(failRate, p90) {
-    if (failRate === 0 && p90 < 200)  return {g:'A',c:'#16a34a',t:'優秀'};
-    if (failRate < 1  && p90 < 500)  return {g:'B',c:'#2563eb',t:'良好'};
-    if (failRate < 5  && p90 < 1000) return {g:'C',c:'#d97706',t:'一般'};
-    if (failRate < 10 && p90 < 2000) return {g:'D',c:'#dc2626',t:'較差'};
-    return {g:'F',c:'#7f1d1d',t:'不合格'};
-  }
-  const gr = grade(s.fail_rate, s.p90);
-  $('lstGradeBox').innerHTML = '<span class="lst-grade" style="background:'+gr.c+';color:#fff" title="性能評級：'+gr.t+'">'+gr.g+'</span>';
-
-  // ── KPI 卡片行 ────────────────────────────────────
-  const passRate = s.total_requests > 0 ? ((s.total_requests-s.total_failures)/s.total_requests*100).toFixed(1) : 0;
-  const prColor  = passRate >= 99 ? '#16a34a' : passRate >= 95 ? '#2563eb' : passRate >= 90 ? '#d97706' : '#dc2626';
-  const frColor  = s.fail_rate === 0 ? '#16a34a' : s.fail_rate < 5 ? '#d97706' : '#dc2626';
-  const rpsColor = '#2563eb';
-
-  let html = '<div class="d-flex gap-2 mb-3 flex-wrap">' +
-    '<div class="lst-kpi" style="background:#1e293b"><div class="kv">'+s.total_requests+'</div><div class="kl">總請求數</div></div>' +
-    '<div class="lst-kpi" style="background:'+prColor+'"><div class="kv">'+passRate+'%</div><div class="kl">成功率</div></div>' +
-    '<div class="lst-kpi" style="background:'+frColor+'"><div class="kv">'+s.fail_rate+'%</div><div class="kl">失敗率</div></div>' +
-    '<div class="lst-kpi" style="background:'+rpsColor+'"><div class="kv">'+s.rps+'</div><div class="kl">RPS（吞吐量）</div></div>' +
-    '<div class="lst-kpi" style="background:#7c3aed"><div class="kv">'+s.users+'</div><div class="kl">並發用戶</div></div>' +
-    '<div class="lst-kpi" style="background:#0891b2"><div class="kv">'+s.run_time+'</div><div class="kl">壓測時長</div></div>' +
-    '</div>';
-
-  // ── 響應時間分析 ──────────────────────────────────
-  const maxMs = Math.max(s.p99, s.max_response_time || s.p99, 1);
-  function pBar(val, color) {
-    const w = Math.min(100, (val/maxMs*100)).toFixed(1);
-    return '<div class="lst-pct-bar"><div class="fill" style="width:'+w+'%;background:'+color+'"></div></div>';
-  }
-
-  html += '<div class="row g-3 mb-3">';
-  // 響應時間百分位卡
-  html += '<div class="col-md-6"><div class="card h-100"><div class="card-header py-2 small fw-bold"><i class="fas fa-stopwatch me-1 text-primary"></i>響應時間分析</div><div class="card-body py-2">' +
-    '<div class="d-flex justify-content-between small text-muted mb-1"><span>平均值</span><span class="fw-bold">'+s.avg_response_time+' ms</span></div>'+pBar(s.avg_response_time,'#94a3b8')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>P50（中位數）</span><span class="fw-bold text-success">'+s.p50+' ms</span></div>'+pBar(s.p50,'#16a34a')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>P75</span><span class="fw-bold text-primary">'+s.p75+' ms</span></div>'+pBar(s.p75,'#2563eb')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>P90</span><span class="fw-bold text-warning">'+s.p90+' ms</span></div>'+pBar(s.p90,'#d97706')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>P95</span><span class="fw-bold" style="color:#ea580c">'+s.p95+' ms</span></div>'+pBar(s.p95,'#ea580c')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>P99（最差 1%）</span><span class="fw-bold text-danger">'+s.p99+' ms</span></div>'+pBar(s.p99,'#dc2626')+
-    '<div class="d-flex justify-content-between small text-muted mb-1 mt-2"><span>最大值</span><span class="fw-bold text-danger">'+s.max_response_time+' ms</span></div>'+pBar(s.max_response_time,'#7f1d1d')+
-    '</div></div></div>';
-
-  // 請求成功/失敗圓餅（CSS 模擬）+ 評級說明
-  const succCnt = s.total_requests - s.total_failures;
-  html += '<div class="col-md-6"><div class="card h-100"><div class="card-header py-2 small fw-bold"><i class="fas fa-chart-pie me-1 text-primary"></i>請求結果 & 評級</div><div class="card-body py-2">' +
-    // 成功/失敗 progress bar
-    '<div class="mb-3">' +
-    '<div class="d-flex justify-content-between small mb-1"><span>成功 <strong class="text-success">'+succCnt+'</strong></span><span>失敗 <strong class="text-danger">'+s.total_failures+'</strong></span></div>' +
-    '<div class="progress" style="height:18px;border-radius:9px">' +
-    '<div class="progress-bar bg-success" style="width:'+passRate+'%">'+passRate+'%</div>' +
-    '<div class="progress-bar bg-danger" style="width:'+s.fail_rate+'%">'+s.fail_rate+'%</div>' +
-    '</div></div>' +
-    // min/avg/max 比較
-    '<div class="d-flex gap-2 text-center mb-3">' +
-    '<div class="flex-fill p-2 rounded" style="background:#f0fdf4"><div class="fw-bold text-success small">'+s.min_response_time+'ms</div><div style="font-size:.68rem;color:#64748b">最小響應</div></div>' +
-    '<div class="flex-fill p-2 rounded" style="background:#eff6ff"><div class="fw-bold text-primary small">'+s.avg_response_time+'ms</div><div style="font-size:.68rem;color:#64748b">平均響應</div></div>' +
-    '<div class="flex-fill p-2 rounded" style="background:#fff1f2"><div class="fw-bold text-danger small">'+s.max_response_time+'ms</div><div style="font-size:.68rem;color:#64748b">最大響應</div></div>' +
+  const stats = r.data.stats;
+  $('lstResultCard').style.display='';
+  $('lstResultBody').innerHTML =
+    '<div class="row g-2 text-center mb-3">' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.total_requests+'</div><div class="lbl">總請求</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val text-danger">'+stats.total_failures+'</div><div class="lbl">失敗數</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val text-'+(stats.fail_rate>5?'danger':stats.fail_rate>0?'warning':'success')+'">'+stats.fail_rate+'%</div><div class="lbl">失敗率</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.avg_response_time+'ms</div><div class="lbl">平均響應</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.p50+'ms</div><div class="lbl">P50</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.p90+'ms</div><div class="lbl">P90</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val">'+stats.p99+'ms</div><div class="lbl">P99</div></div></div>' +
+    '<div class="col"><div class="locust-stat"><div class="val text-primary">'+stats.rps+'</div><div class="lbl">RPS</div></div></div>' +
     '</div>' +
-    // 評級說明
-    '<div class="p-2 rounded d-flex align-items-center gap-2" style="background:#f8fafc">' +
-    '<span class="lst-grade" style="background:'+gr.c+';color:#fff;font-size:.95rem;width:30px;height:30px;line-height:30px">'+gr.g+'</span>' +
-    '<div><div class="fw-bold small">性能評級：'+gr.t+'</div>' +
-    '<div style="font-size:.7rem;color:#64748b">失敗率 '+s.fail_rate+'%，P90 '+s.p90+'ms，RPS '+s.rps+'</div></div>' +
-    '</div>' +
-    '</div></div></div>';
-
-  html += '</div>';  // end row
-
-  // ── 逐接口詳細表格 ────────────────────────────────
-  if (s.per_endpoint && s.per_endpoint.length > 0) {
-    html += '<div class="card mb-3"><div class="card-header py-2 small fw-bold"><i class="fas fa-list me-1 text-primary"></i>逐接口詳細數據</div>' +
-      '<div class="table-responsive"><table class="table table-sm table-hover mb-0" style="font-size:.77rem">' +
-      '<thead class="table-dark"><tr>' +
-      '<th>接口名稱</th><th>方法</th><th style="text-align:right">請求數</th><th style="text-align:right">失敗數</th>' +
-      '<th style="text-align:right">失敗率</th><th style="text-align:right">Min ms</th><th style="text-align:right">平均ms</th>' +
-      '<th style="text-align:right">P50ms</th><th style="text-align:right">P90ms</th><th style="text-align:right">P99ms</th>' +
-      '<th style="text-align:right">Max ms</th><th style="text-align:right">RPS</th>' +
-      '</tr></thead><tbody>';
-    html += (s.per_endpoint||[]).map(ep => {
-      const er = ep.requests > 0 ? (ep.failures/ep.requests*100).toFixed(1) : '0.0';
-      const erColor = er > 5 ? 'danger' : er > 0 ? 'warning' : 'success';
-      const p90Color = ep.p90_ms < 200 ? 'success' : ep.p90_ms < 1000 ? 'warning' : 'danger';
-      return '<tr class="lst-ep-row">' +
-        '<td title="'+eh(ep.name)+'" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>'+eh(ep.name)+'</strong></td>' +
-        '<td><span class="bm '+ep.method.toLowerCase()+'">'+ep.method+'</span></td>' +
-        '<td style="text-align:right">'+ep.requests+'</td>' +
-        '<td style="text-align:right" class="text-danger fw-bold">'+ep.failures+'</td>' +
-        '<td style="text-align:right"><span class="badge bg-'+erColor+'">'+er+'%</span></td>' +
-        '<td style="text-align:right text-muted">'+ep.min_ms+'</td>' +
-        '<td style="text-align:right">'+ep.avg_ms+'</td>' +
-        '<td style="text-align:right text-success">'+ep.p50_ms+'</td>' +
-        '<td style="text-align:right"><span class="text-'+p90Color+' fw-bold">'+ep.p90_ms+'</span></td>' +
-        '<td style="text-align:right text-danger">'+ep.p99_ms+'</td>' +
-        '<td style="text-align:right">'+ep.max_ms+'</td>' +
-        '<td style="text-align:right text-primary fw-bold">'+ep.rps+'</td>' +
-        '</tr>';
-    }).join('');
-    html += '</tbody></table></div></div>';
-  }
-
-  // ── 底部操作按鈕 ──────────────────────────────────
-  // 把 stats 存到 window 變量，避免 onclick 屬性內嵌 JSON 引號問題
-  window._lstLastStats  = s;
-  window._lstLastRptId  = rid;
-  html += '<div class="d-flex gap-2">' +
-    '<button class="btn btn-primary flex-fill" onclick="showRpt('+rid+')"><i class="fas fa-chart-bar me-1"></i>查看完整測試報告</button>' +
-    '<button class="btn btn-outline-secondary btn-sm" onclick="lstExportSummary()"><i class="fas fa-download me-1"></i>導出摘要 (.txt)</button>' +
-    '<button class="btn btn-outline-success btn-sm" onclick="lstExportCsv()"><i class="fas fa-file-csv me-1"></i>導出 CSV</button>' +
-    '</div>';
-
-  $('lstResultCard').style.display = '';
-  $('lstResultBody').innerHTML = html;
-  // 滾動到結果
-  $('lstResultCard').scrollIntoView({behavior:'smooth',block:'nearest'});
-  toast('壓測完成！評級 '+gr.g+'（'+gr.t+'），RPS='+s.rps+', P90='+s.p90+'ms', passRate>=99?'success':'warning');
-}
-
-function lstExportSummary() {
-  const stats = window._lstLastStats;
-  const reportId = window._lstLastRptId;
-  if (!stats) { toast('無結果數據，請先完成壓測', 'warning'); return; }
-  const sep = '='.repeat(44);
-  const lines = [
-    '壓測報告摘要', sep,
-    '報告ID:   ' + reportId,
-    '導出時間: ' + new Date().toLocaleString(),
-    '並發用戶: ' + stats.users,
-    '執行時長: ' + stats.run_time,
-    '',
-    '── 核心指標 ────────────────────────────',
-    '總請求數: ' + stats.total_requests,
-    '成功數:   ' + (stats.total_requests - stats.total_failures),
-    '失敗數:   ' + stats.total_failures,
-    '失敗率:   ' + stats.fail_rate + '%',
-    'RPS吞吐量: ' + stats.rps,
-    '',
-    '── 響應時間 (ms) ───────────────────────',
-    '最小值:  ' + stats.min_response_time,
-    '平均值:  ' + stats.avg_response_time,
-    'P50:     ' + stats.p50,
-    'P75:     ' + stats.p75,
-    'P90:     ' + stats.p90,
-    'P95:     ' + stats.p95,
-    'P99:     ' + stats.p99,
-    '最大值:  ' + stats.max_response_time,
-    '',
-    '── 逐接口詳細數據 ──────────────────────',
-    ['接口名稱','方法','請求數','失敗數','失敗率%','Min ms','Avg ms','P50ms','P90ms','P99ms','Max ms','RPS'].join('\t'),
-  ];
-  (stats.per_endpoint||[]).forEach(ep => {
-    const er = ep.requests>0 ? (ep.failures/ep.requests*100).toFixed(1) : '0.0';
-    lines.push([ep.name, ep.method||'-', ep.requests, ep.failures, er,
-      ep.min_ms, ep.avg_ms, ep.p50_ms, ep.p90_ms, ep.p99_ms, ep.max_ms, ep.rps].join('\t'));
-  });
-  lines.push('', sep, '由 API 測試平台自動生成');
-  _lstDownload(lines.join('\n'), 'locust_report_'+reportId+'.txt', 'text/plain;charset=utf-8');
-  toast('摘要已導出', 'success');
-}
-
-function lstExportCsv() {
-  const stats = window._lstLastStats;
-  const reportId = window._lstLastRptId;
-  if (!stats) { toast('無結果數據，請先完成壓測', 'warning'); return; }
-  const rows = [
-    ['接口名稱','方法','請求數','失敗數','失敗率%','Min_ms','Avg_ms','P50_ms','P90_ms','P99_ms','Max_ms','RPS'],
-  ];
-  (stats.per_endpoint||[]).forEach(ep => {
-    const er = ep.requests>0 ? (ep.failures/ep.requests*100).toFixed(1) : '0.0';
-    rows.push(['"'+String(ep.name||'').replace(/"/g,'""')+'"',
-      ep.method||'-', ep.requests, ep.failures, er,
-      ep.min_ms, ep.avg_ms, ep.p50_ms, ep.p90_ms, ep.p99_ms, ep.max_ms, ep.rps]);
-  });
-  rows.push(['"[匯總]"','ALL',stats.total_requests,stats.total_failures,stats.fail_rate,
-    stats.min_response_time,stats.avg_response_time,stats.p50,stats.p90,stats.p99,
-    stats.max_response_time,stats.rps]);
-  const csv = '\uFEFF' + rows.map(r=>r.join(',')).join('\n');
-  _lstDownload(csv, 'locust_report_'+reportId+'.csv', 'text/csv;charset=utf-8');
-  toast('CSV 已導出（含BOM，可直接用 Excel 打開）', 'success');
-}
-
-function _lstDownload(content, filename, mime) {
-  const blob = new Blob([content], {type: mime});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+    '<table class="table table-sm table-bordered" style="font-size:.77rem"><thead><tr><th>接口</th><th>請求數</th><th>失敗</th><th>失敗率</th><th>平均ms</th><th>P50ms</th><th>P90ms</th><th>P99ms</th><th>RPS</th></tr></thead><tbody>' +
+    (stats.per_endpoint||[]).map(ep=>{const er=ep.requests>0?(ep.failures/ep.requests*100).toFixed(1):0; return '<tr><td>'+eh(ep.name)+'</td><td>'+ep.requests+'</td><td class="text-danger">'+ep.failures+'</td><td class="text-'+(er>5?'danger':er>0?'warning':'success')+'">'+er+'%</td><td>'+ep.avg_ms+'</td><td>'+ep.p50_ms+'</td><td>'+ep.p90_ms+'</td><td>'+ep.p99_ms+'</td><td>'+ep.rps+'</td></tr>';}).join('') +
+    '</tbody></table>' +
+    '<button class="btn btn-outline-primary btn-sm w-100" onclick="showRpt('+r.data.report_id+')"><i class="fas fa-chart-bar me-1"></i>查看測試報告</button>';
+  toast('壓測報告已保存 (ID='+r.data.report_id+')','success');
 }
 
 // ══════════ SQL TOOL ══════════
@@ -2913,51 +2721,7 @@ async function showRpt(id) {
       (res.pre_sql_result?'<div class="mb-1"><strong>前置SQL：</strong><div class="sqr mt-1" style="max-height:70px">'+eh(res.pre_sql_result.substring(0,300))+'</div></div>':'') +
       (res.post_sql_result?'<div class="mb-1"><strong>後置SQL：</strong><div class="sqr mt-1" style="max-height:70px">'+eh(res.post_sql_result.substring(0,300))+'</div></div>':'') +
       '</div>' +
-      (()=>{
-        // 判斷是否壓測結果（response_body 為空，request_body 是 stats JSON）
-        let respHtml = '';
-        if (!res.response_body && res.request_body) {
-          try {
-            const st = JSON.parse(res.request_body);
-            if (st.total_requests !== undefined) {
-              // 壓測結果：渲染統計面板
-              const er = st.fail_rate||0;
-              const erColor = er===0?'success':er<5?'warning':'danger';
-              respHtml =
-                '<div class="p-2 rounded mb-1" style="background:#f0f9ff;border:1px solid #bae6fd">' +
-                '<div class="small fw-bold text-primary mb-1"><i class="fas fa-tachometer-alt me-1"></i>壓測統計摘要</div>' +
-                '<div class="row g-1 text-center mb-1">' +
-                '<div class="col-3"><div class="fw-bold">'+st.total_requests+'</div><div style="font-size:.65rem;color:#64748b">總請求</div></div>' +
-                '<div class="col-3"><div class="fw-bold text-'+erColor+'">'+er+'%</div><div style="font-size:.65rem;color:#64748b">失敗率</div></div>' +
-                '<div class="col-3"><div class="fw-bold text-primary">'+st.rps+'</div><div style="font-size:.65rem;color:#64748b">RPS</div></div>' +
-                '<div class="col-3"><div class="fw-bold">'+st.avg_response_time+'ms</div><div style="font-size:.65rem;color:#64748b">平均響應</div></div>' +
-                '</div>' +
-                '<div class="row g-1 text-center">' +
-                '<div class="col"><div style="font-size:.7rem">P50</div><div class="fw-bold small text-success">'+st.p50+'ms</div></div>' +
-                '<div class="col"><div style="font-size:.7rem">P90</div><div class="fw-bold small text-warning">'+st.p90+'ms</div></div>' +
-                '<div class="col"><div style="font-size:.7rem">P99</div><div class="fw-bold small text-danger">'+st.p99+'ms</div></div>' +
-                '<div class="col"><div style="font-size:.7rem">MAX</div><div class="fw-bold small text-danger">'+st.max_response_time+'ms</div></div>' +
-                '</div>' +
-                (st.per_endpoint&&st.per_endpoint.length?
-                  '<hr class="my-1"><div style="font-size:.68rem;color:#64748b" class="mb-1">逐接口：</div>' +
-                  st.per_endpoint.map(ep=>{
-                    const epEr = ep.requests>0?(ep.failures/ep.requests*100).toFixed(1):0;
-                    return '<div class="d-flex justify-content-between border-bottom py-1" style="font-size:.7rem">' +
-                      '<span class="text-truncate" style="max-width:120px" title="'+ep.name+'">'+ep.name+'</span>' +
-                      '<span><span class="bm '+ep.method.toLowerCase()+' me-1" style="font-size:.6rem">'+ep.method+'</span>' +
-                      '<span class="text-muted">'+ep.requests+'次 </span>' +
-                      '<span class="text-'+( epEr>5?'danger':epEr>0?'warning':'success')+'">'+epEr+'%失敗 </span>' +
-                      '<span>avg:'+ep.avg_ms+'ms p90:'+ep.p90_ms+'ms</span></span></div>';
-                  }).join('') : '') +
-                '</div>';
-            }
-          } catch(e) {}
-        }
-        if (!respHtml) {
-          respHtml = '<div class="rb" style="max-height:220px">'+hl(res.response_body||'（無響應體）')+'</div>';
-        }
-        return '<div class="col-md-6"><strong>'+(res.response_body?'響應體：':'壓測響應統計：')+'</strong><div class="mt-1">'+respHtml+'</div></div>';
-      })() +
+      '<div class="col-md-6"><strong>響應體：</strong><div class="rb mt-1" style="max-height:220px">'+hl(res.response_body)+'</div></div>' +
       '</div></div></div></div>';
   });
   $('rptBody').innerHTML = h + '</div>';
