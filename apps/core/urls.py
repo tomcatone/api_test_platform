@@ -43,7 +43,8 @@ urlpatterns = [
     path('apis/<int:pk>/',     views.api_detail,     name='api-detail'),
     path('apis/<int:pk>/run/', views.api_run_single, name='api-run-single'),
     # 批量執行
-    path('run/batch/',         views.api_run_batch,  name='run-batch'),
+    path('run/batch/',                       views.api_run_batch,   name='run-batch'),
+    path('run/batch/status/<str:task_id>/', views.api_batch_status, name='run-batch-status'),
     # 報告
     path('reports/',           views.report_list,    name='report-list'),
     path('reports/<int:pk>/',  views.report_detail,  name='report-detail'),

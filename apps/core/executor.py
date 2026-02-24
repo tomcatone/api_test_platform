@@ -863,45 +863,99 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
 
 # ── 批量執行 ─────────────────────────────────────────
 
-def execute_batch(api_ids: list, report_name: str = None, stop_on_failure: bool = False):
-    from apps.core.models import ApiConfig, TestReport, TestResult
+# 後台任務狀態存儲（內存，進程重啟後清空）
+_batch_tasks: dict = {}   # task_id → {status, report_id, progress, total, error}
+_batch_tasks_lock = threading.Lock()
+
+
+def _save_result(report, api, rd):
+    """保存單次執行結果到 TestResult"""
+    from apps.core.models import TestResult
+    TestResult.objects.create(
+        report=report, api=api,
+        api_name=rd['api_name'], url=rd['url'], method=rd['method'],
+        use_async=rd['use_async'],
+        request_headers=json.dumps(rd['request_headers'], ensure_ascii=False),
+        request_params=json.dumps(rd['request_params'], ensure_ascii=False),
+        request_body=json.dumps(rd['request_body'], ensure_ascii=False, default=str),
+        response_status=rd['response_status'],
+        response_headers=json.dumps(rd['response_headers'], ensure_ascii=False),
+        response_body=rd['response_body'][:10000],
+        response_time=rd['response_time'], status=rd['status'],
+        error_message=rd['error_message'],
+        extracted_vars=json.dumps(rd['extracted_vars'], ensure_ascii=False, default=str),
+        assertion_results=json.dumps(rd['assertion_results'], ensure_ascii=False, default=str),
+        db_assertion_results=json.dumps(rd['db_assertion_results'], ensure_ascii=False, default=str),
+        deepdiff_results=json.dumps(rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
+        pre_sql_result=rd['pre_sql_result'], post_sql_result=rd['post_sql_result'],
+    )
+
+
+def execute_batch(api_ids: list, report_name: str = None,
+                  stop_on_failure: bool = False, task_id: str = None):
+    """
+    批量執行接口，支持：
+    - 每個接口獨立的 repeat_enabled / repeat_count 幂等配置
+    - 後台線程執行（task_id 模式）時更新進度
+    """
+    from apps.core.models import ApiConfig, TestReport
     reset_runtime_vars()
-    apis = ApiConfig.objects.filter(id__in=api_ids).order_by('sort_order', 'id')
-    if not apis.exists():
+    apis = list(ApiConfig.objects.filter(id__in=api_ids).order_by('sort_order', 'id'))
+    if not apis:
         return None
+
+    # 計算總執行次數（含每個接口的 repeat_count）
+    def _api_total_runs(a):
+        return max(1, min(int(getattr(a, 'repeat_count', 1) or 1), 100))                if getattr(a, 'repeat_enabled', False) else 1
+
+    total_runs = sum(_api_total_runs(a) for a in apis)
     report_name = report_name or f'批量測試_{time.strftime("%Y%m%d_%H%M%S")}'
-    report = TestReport.objects.create(name=report_name, status='running', total=apis.count())
+    report = TestReport.objects.create(name=report_name, status='running', total=total_runs)
+
+    # 更新任務狀態
+    def _upd(progress, status='running'):
+        if task_id:
+            with _batch_tasks_lock:
+                if task_id in _batch_tasks:
+                    _batch_tasks[task_id].update({
+                        'status': status, 'progress': progress,
+                        'total': total_runs, 'report_id': report.id
+                    })
+
     passed = failed = error = 0
+    done = 0
     t0 = time.time()
+    aborted = False
+
     for api in apis:
-        rd = execute_api(api)
-        TestResult.objects.create(
-            report=report, api=api,
-            api_name=rd['api_name'], url=rd['url'], method=rd['method'],
-            use_async=rd['use_async'],
-            request_headers=json.dumps(rd['request_headers'], ensure_ascii=False),
-            request_params=json.dumps(rd['request_params'], ensure_ascii=False),
-            request_body=json.dumps(rd['request_body'], ensure_ascii=False, default=str),
-            response_status=rd['response_status'],
-            response_headers=json.dumps(rd['response_headers'], ensure_ascii=False),
-            response_body=rd['response_body'][:10000],
-            response_time=rd['response_time'], status=rd['status'],
-            error_message=rd['error_message'],
-            extracted_vars=json.dumps(rd['extracted_vars'], ensure_ascii=False, default=str),
-            assertion_results=json.dumps(rd['assertion_results'], ensure_ascii=False, default=str),
-            db_assertion_results=json.dumps(rd['db_assertion_results'], ensure_ascii=False, default=str),
-            deepdiff_results=json.dumps(rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
-            pre_sql_result=rd['pre_sql_result'], post_sql_result=rd['post_sql_result'],
-        )
-        if rd['status'] == 'pass': passed += 1
-        elif rd['status'] == 'fail': failed += 1
-        else: error += 1
-        # 失敗停止：fail 或 error 狀態時中斷
-        if stop_on_failure and rd['status'] in ('fail', 'error'):
-            logger.info(f'[Batch] 接口 {rd["api_name"]} {rd["status"]}，已啟用失敗停止，中斷執行')
+        rc = _api_total_runs(api)
+        for run_i in range(rc):
+            if aborted:
+                break
+            rd = execute_api(api)
+            _save_result(report, api, rd)
+            if rd['status'] == 'pass':   passed += 1
+            elif rd['status'] == 'fail': failed += 1
+            else:                         error  += 1
+            done += 1
+            _upd(done)
+            # 失敗停止：僅在 repeat 最後一次或非幂等時判斷
+            if stop_on_failure and rd['status'] in ('fail', 'error'):
+                logger.info(
+                    f'[Batch] {rd["api_name"]} run#{run_i+1} {rd["status"]}，'
+                    f'已啟用失敗停止，中斷執行'
+                )
+                aborted = True
+                break
+        if aborted:
             break
-    report.passed = passed; report.failed = failed; report.error = error
-    report.total  = passed + failed + error   # 實際執行數（stop_on_failure 中斷時小於原始 total）
-    report.duration = round(time.time() - t0, 3); report.status = 'completed'
+
+    report.passed = passed
+    report.failed = failed
+    report.error  = error
+    report.total  = passed + failed + error
+    report.duration = round(time.time() - t0, 3)
+    report.status = 'completed'
     report.save()
+    _upd(done, 'completed')
     return report

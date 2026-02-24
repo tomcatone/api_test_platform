@@ -16,7 +16,7 @@ from django.contrib.auth.models import User
 from django.shortcuts import redirect
 
 from .models import Category, GlobalVariable, ApiConfig, TestReport, TestResult, DatabaseConfig, UserProfile
-from .executor import execute_api, execute_batch, reset_runtime_vars
+from .executor import execute_api, execute_batch, reset_runtime_vars, _batch_tasks, _batch_tasks_lock
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +361,14 @@ def api_list(request):
         cat_id    = request.GET.get('category_id', '').strip()
         method_f  = request.GET.get('method', '').strip()
 
-        qs = ApiConfig.objects.select_related('category').all()
+        # 只 SELECT brief 模式需要的欄位，不碰可能尚未 migrate 的新欄位
+        # 即使未執行 migrate，也能正常查詢
+        BRIEF_FIELDS = [
+            'id','name','method','url','category_id','category',
+            'encrypted','use_async','use_session',
+            'sort_order','description','created_at','updated_at',
+        ]
+        qs = ApiConfig.objects.select_related('category').only(*BRIEF_FIELDS)
         if kw:
             qs = qs.filter(Q(name__icontains=kw) | Q(url__icontains=kw))
         if cat_id:
@@ -371,10 +378,11 @@ def api_list(request):
 
         pager = Paginator(qs, page_size)
         pg    = pager.get_page(page)
+        items = [_api_to_dict(a, brief=True) for a in pg]
         return success({
             'total': pager.count, 'pages': pager.num_pages,
             'page': page, 'page_size': page_size,
-            'items': [_api_to_dict(a, brief=True) for a in pg]
+            'items': items
         })
     elif request.method == 'POST':
         return _create_or_update_api(None, parse_body(request))
@@ -394,14 +402,28 @@ def api_detail(request, pk):
         return success(message='刪除成功')
 
 
+_MISSING = object()
+
+
+def _safe(api, field, default=None):
+    # Read from __dict__ only - avoids deferred SQL fetch and missing column errors
+    val = api.__dict__.get(field, _MISSING)
+    if val is _MISSING:
+        return default
+    return val
+
+
 def _api_to_dict(api, brief=True):
     d = {
         'id': api.id, 'name': api.name,
         'method': api.method, 'url': api.url,
         'category_id': api.category_id,
         'category_name': api.category.name if api.category else '未分類',
-        'encrypted': api.encrypted,
-        'use_async': api.use_async,
+        'encrypted':      _safe(api, 'encrypted', False),
+        'use_async':      _safe(api, 'use_async', False),
+        'use_session':    _safe(api, 'use_session', False),
+        'repeat_enabled': bool(_safe(api, 'repeat_enabled', False)),
+        'repeat_count':   int(_safe(api, 'repeat_count', 1) or 1),
         'sort_order': api.sort_order, 'description': api.description,
         'created_at': api.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         'updated_at': api.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
@@ -421,16 +443,18 @@ def _api_to_dict(api, brief=True):
             'encryption_key': api.encryption_key,
             'encryption_algorithm': api.encryption_algorithm,
             'timeout': api.timeout,
-            'ssl_verify': getattr(api, 'ssl_verify', 'true') or 'true',
-            'ssl_cert':   getattr(api, 'ssl_cert', '') or '',
-            'client_cert_enabled': bool(getattr(api, 'client_cert_enabled', False)),
-            'client_cert':         getattr(api, 'client_cert', '') or '',
-            'client_key':          getattr(api, 'client_key', '') or '',
+            'ssl_verify': _safe(api, 'ssl_verify', 'true') or 'true',
+            'ssl_cert':   _safe(api, 'ssl_cert', '') or '',
+            'client_cert_enabled': bool(_safe(api, 'client_cert_enabled', False)),
+            'client_cert':         _safe(api, 'client_cert', '') or '',
+            'client_key':          _safe(api, 'client_key', '') or '',
             'pre_sql_db_id': api.pre_sql_db_id,
             'pre_sql': api.pre_sql,
             'post_sql_db_id': api.post_sql_db_id,
             'post_sql': api.post_sql,
             'pre_redis_rules': getattr(api, 'pre_redis_rules', '[]') or '[]',
+            'repeat_enabled': bool(_safe(api, 'repeat_enabled', False)),
+            'repeat_count':   int(_safe(api, 'repeat_count', 1) or 1),
         })
     return d
 
@@ -491,6 +515,8 @@ def _create_or_update_api(api, body):
         'post_sql_db_id': body.get('post_sql_db_id') or None,
         'post_sql': body.get('post_sql', ''),
         'pre_redis_rules': _vj(body.get('pre_redis_rules'), '[]'),
+        'repeat_enabled': bool(body.get('repeat_enabled', False)),
+        'repeat_count':   max(1, min(int(body.get('repeat_count', 1) or 1), 100)),
         'sort_order': int(body.get('sort_order', 0)),
         'description': body.get('description', ''),
     }
@@ -519,46 +545,84 @@ def api_run_single(request, pk):
     except ApiConfig.DoesNotExist:
         return error('接口不存在', 404)
 
-    rd = execute_api(api, parse_body(request).get('extra_vars', {}))
+    body_data    = parse_body(request)
+    extra_vars   = body_data.get('extra_vars', {})
+    # 從接口配置讀取幂等性設置（在編輯頁面設定，而非執行時傳入）
+    repeat_count = max(1, min(int(getattr(api, 'repeat_count', 1) or 1), 100)) if getattr(api, 'repeat_enabled', False) else 1
 
-    # 保存報告
+    # ── 多次執行（幂等性測試）──
+    results_list = []
+    total_time   = 0
+    passed = failed = error_cnt = 0
+    for i in range(repeat_count):
+        rd = execute_api(api, extra_vars)
+        results_list.append(rd)
+        total_time += rd.get('response_time', 0)
+        if rd['status'] == 'pass':   passed   += 1
+        elif rd['status'] == 'fail': failed   += 1
+        else:                         error_cnt += 1
+
+    # 取最後一次結果作為主結果（展示）
+    rd   = results_list[-1]
+    avg_time = round(total_time / repeat_count, 2)
+
+    # 保存報告（多次執行合併為一份報告）
+    report_name = f'單測-{api.name}-x{repeat_count}-{time.strftime("%H:%M:%S")}' if repeat_count > 1 else f'單測-{api.name}-{time.strftime("%H:%M:%S")}'
     report = TestReport.objects.create(
-        name=f'單測-{api.name}-{time.strftime("%H:%M:%S")}',
-        status='completed', total=1,
-        passed=1 if rd['status'] == 'pass' else 0,
-        failed=1 if rd['status'] == 'fail' else 0,
-        error=1  if rd['status'] == 'error' else 0,
-        duration=rd['response_time'] / 1000,
+        name=report_name,
+        status='completed', total=repeat_count,
+        passed=passed, failed=failed, error=error_cnt,
+        duration=total_time / 1000,
     )
-    TestResult.objects.create(
-        report=report, api=api,
-        api_name=rd['api_name'], url=rd['url'], method=rd['method'],
-        use_async=rd['use_async'],
-        request_headers=json.dumps(rd['request_headers'], ensure_ascii=False),
-        request_params=json.dumps(rd['request_params'], ensure_ascii=False),
-        request_body=json.dumps(rd['request_body'], ensure_ascii=False),
-        response_status=rd['response_status'],
-        response_headers=json.dumps(rd['response_headers'], ensure_ascii=False),
-        response_body=rd['response_body'][:10000],
-        response_time=rd['response_time'],
-        status=rd['status'],
-        error_message=rd['error_message'],
-        extracted_vars=json.dumps(rd['extracted_vars'], ensure_ascii=False),
-        assertion_results=json.dumps(rd['assertion_results'], ensure_ascii=False, default=str),
-        db_assertion_results=json.dumps(rd['db_assertion_results'], ensure_ascii=False, default=str),
-        deepdiff_results=json.dumps(rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
-        pre_sql_result=rd['pre_sql_result'],
-        post_sql_result=rd['post_sql_result'],
-    )
+    # 保存每次結果
+    for run_rd in results_list:
+        TestResult.objects.create(
+            report=report, api=api,
+            api_name=run_rd['api_name'], url=run_rd['url'], method=run_rd['method'],
+            use_async=run_rd['use_async'],
+            request_headers=json.dumps(run_rd['request_headers'], ensure_ascii=False),
+            request_params=json.dumps(run_rd['request_params'], ensure_ascii=False),
+            request_body=json.dumps(run_rd['request_body'], ensure_ascii=False),
+            response_status=run_rd['response_status'],
+            response_headers=json.dumps(run_rd['response_headers'], ensure_ascii=False),
+            response_body=run_rd['response_body'][:10000],
+            response_time=run_rd['response_time'],
+            status=run_rd['status'],
+            error_message=run_rd['error_message'],
+            extracted_vars=json.dumps(run_rd['extracted_vars'], ensure_ascii=False),
+            assertion_results=json.dumps(run_rd['assertion_results'], ensure_ascii=False, default=str),
+            db_assertion_results=json.dumps(run_rd['db_assertion_results'], ensure_ascii=False, default=str),
+            deepdiff_results=json.dumps(run_rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
+            pre_sql_result=run_rd['pre_sql_result'],
+            post_sql_result=run_rd['post_sql_result'],
+        )
+
+    # 多次執行摘要
+    repeat_summary = None
+    if repeat_count > 1:
+        times_ms = [r.get('response_time', 0) for r in results_list]
+        repeat_summary = {
+            'total': repeat_count, 'passed': passed, 'failed': failed, 'error': error_cnt,
+            'pass_rate': round(passed / repeat_count * 100, 1),
+            'avg_time': avg_time,
+            'min_time': min(times_ms),
+            'max_time': max(times_ms),
+            'statuses': [r['response_status'] for r in results_list],
+            'consistent_status': len(set(r['response_status'] for r in results_list)) == 1,
+            'consistent_result': len(set(r['status'] for r in results_list)) == 1,
+        }
 
     return success({
         'report_id': report.id,
+        'repeat_count': repeat_count,
+        'repeat_summary': repeat_summary,
         'status': rd['status'],
         'use_async': rd['use_async'],
         'use_session': rd.get('use_session', False),
         'response_status': rd['response_status'],
         'response_body': rd['response_body'][:5000],
         'response_time': rd['response_time'],
+        'avg_time': avg_time,
         'extracted_vars': rd['extracted_vars'],
         'assertion_results': rd['assertion_results'],
         'db_assertion_results': rd['db_assertion_results'],
@@ -566,7 +630,10 @@ def api_run_single(request, pk):
         'pre_sql_result': _safe_json(rd['pre_sql_result']) if rd['pre_sql_result'] else None,
         'post_sql_result': _safe_json(rd['post_sql_result']) if rd['post_sql_result'] else None,
         'error_message': rd['error_message'],
-    }, '執行完成')
+        'enc_applied': rd.get('enc_applied', []),
+        'encrypted_body': rd.get('encrypted_body'),
+        'pre_redis_log': rd.get('pre_redis_log', []),
+    }, f'執行完成（共 {repeat_count} 次）' if repeat_count > 1 else '執行完成')
 
 
 # ═══════════════════════════════════════════════
@@ -575,23 +642,67 @@ def api_run_single(request, pk):
 
 @csrf_exempt
 def api_run_batch(request):
+    """
+    POST /api/run/batch/
+    立即在後台線程啟動批量執行，返回 task_id 供輪詢
+    避免長時間同步阻塞導致頁面無響應
+    """
     if request.method != 'POST':
         return error('方法不允許')
+    import threading, uuid as _uuid
     body            = parse_body(request)
     api_ids         = body.get('api_ids', [])
     rep_name        = body.get('report_name', '').strip()
     stop_on_failure = bool(body.get('stop_on_failure', False))
     if not api_ids:
         return error('請選擇要執行的接口')
-    report = execute_batch(api_ids, rep_name, stop_on_failure=stop_on_failure)
-    if not report:
-        return error('未找到有效接口')
-    return success({
-        'report_id': report.id, 'name': report.name,
-        'total': report.total, 'passed': report.passed,
-        'failed': report.failed, 'error': report.error,
-        'duration': report.duration, 'pass_rate': report.pass_rate,
-    }, '批量執行完成')
+
+    task_id = str(_uuid.uuid4())[:8]
+    with _batch_tasks_lock:
+        _batch_tasks[task_id] = {
+            'status': 'running', 'progress': 0, 'total': len(api_ids),
+            'report_id': None, 'error': None,
+        }
+
+    def _run():
+        try:
+            execute_batch(api_ids, rep_name,
+                          stop_on_failure=stop_on_failure, task_id=task_id)
+        except Exception as ex:
+            with _batch_tasks_lock:
+                if task_id in _batch_tasks:
+                    _batch_tasks[task_id]['status'] = 'error'
+                    _batch_tasks[task_id]['error']  = str(ex)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return success({'task_id': task_id}, '批量執行已在後台啟動')
+
+
+@csrf_exempt
+def api_batch_status(request, task_id):
+    """
+    GET /api/run/batch/status/<task_id>/
+    輪詢批量執行進度與結果
+    """
+    with _batch_tasks_lock:
+        task = _batch_tasks.get(task_id)
+    if not task:
+        return error('任務不存在或已過期', 404)
+
+    data = dict(task)
+    # 已完成：附上報告摘要
+    if task['status'] == 'completed' and task.get('report_id'):
+        try:
+            report = TestReport.objects.get(pk=task['report_id'])
+            data['report'] = {
+                'report_id': report.id, 'name': report.name,
+                'total': report.total, 'passed': report.passed,
+                'failed': report.failed, 'error': report.error,
+                'duration': report.duration, 'pass_rate': report.pass_rate,
+            }
+        except TestReport.DoesNotExist:
+            pass
+    return success(data)
 
 
 # ═══════════════════════════════════════════════

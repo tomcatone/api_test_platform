@@ -213,6 +213,9 @@ class ApiConfig(models.Model):
     client_cert_enabled = models.BooleanField(default=False, verbose_name='啟用客戶端證書 (mTLS)')
     client_cert         = models.CharField(max_length=500, blank=True, default='', verbose_name='客戶端證書路徑 (.pem/.crt)')
     client_key          = models.CharField(max_length=500, blank=True, default='', verbose_name='客戶端私鑰路徑 (.pem/.key)')
+    # 幂等性測試
+    repeat_enabled      = models.BooleanField(default=False, verbose_name='啟用重複執行（幂等性測試）')
+    repeat_count        = models.IntegerField(default=1, verbose_name='重複執行次數')
 
     # ── 變量提取規則 ──
     extract_vars = models.TextField(default='[]', verbose_name='提取變量規則 (JSON)')

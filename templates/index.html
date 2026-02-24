@@ -118,7 +118,15 @@
 
 <!-- Sidebar -->
 <nav class="sb">
-  <div class="sb-brand"><i class="fas fa-flask"></i><span>API 測試平台 v3</span></div>
+  <div class="sb-brand" style="flex-direction:column;align-items:flex-start;gap:4px">
+    <div style="display:flex;align-items:center;gap:8px"><i class="fas fa-flask"></i><span data-i18n="appTitle">API 測試平台 v3</span></div>
+    <select id="langSel" onchange="setLang(this.value)" style="font-size:.65rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#c7d2fe;border-radius:4px;padding:2px 6px;cursor:pointer;width:100%">
+      <option value="zh-TW">繁體中文</option>
+      <option value="zh-CN">简体中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+    </select>
+  </div>
   <div class="sb-nav">
     <div class="grp">總覽</div>
     <button class="nb active" data-page="dashboard"><i class="fas fa-tachometer-alt"></i>控制台</button>
@@ -476,6 +484,11 @@
         <label class="form-label">請求模式</label>
         <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="apiAsync"><label class="form-check-label small" for="apiAsync"><span class="at2">httpx異步</span></label></div>
         <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="apiSession"><label class="form-check-label small" for="apiSession">Session保持</label></div>
+        <div class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="apiRepeatEnabled" onchange="togRepeat()"><label class="form-check-label small" for="apiRepeatEnabled">幂等性測試</label></div>
+        <div id="repeatCountWrap" style="display:none" class="mt-1 d-flex align-items-center gap-1">
+          <input type="number" class="form-control form-control-sm" id="apiRepeatCount" value="1" min="1" max="100" style="width:60px">
+          <span class="small text-muted">次</span>
+        </div>
       </div>
       <div class="col-md-5"><label class="form-label">URL * <small class="text-muted">(支持 {{變量名}})</small></label><input type="text" class="form-control" id="apiUrl" placeholder="https://api.example.com/users"></div>
       <div class="col-md-12"><label class="form-label">描述</label><input type="text" class="form-control" id="apiDesc"></div>
@@ -882,6 +895,187 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
+
+// ══════════ I18N 多語言系統 ══════════
+const LANGS = {
+  'zh-TW': {
+    appTitle:'API 測試平台 v3', dashboard:'控制台', apiList:'接口列表',
+    apiCategory:'接口分類', variables:'全局變量/Token', dbConfig:'MySQL 配置',
+    redisConfig:'Redis 配置', redisTool:'Redis 工具', emailConfig:'郵件配置',
+    scheduler:'定時任務', batchRun:'批量執行', locust:'壓力測試 Locust',
+    sqlTool:'SQL 工具', reports:'測試報告', accounts:'賬戶管理',
+    overview:'總覽', apiMgr:'接口管理', dataSrc:'數據源配置',
+    notify:'通知 & 郵件', runReport:'執行 & 報告', sysMgr:'系統管理',
+    addApi:'添加接口', refresh:'刷新', save:'保存', cancel:'取消',
+    delete:'刪除', execute:'執行', edit:'編輯', search:'搜索',
+    total:'總數', passed:'通過', failed:'失敗', error:'錯誤',
+    passRate:'通過率', duration:'耗時', viewReport:'查看詳細報告',
+    batchRunning:'批量執行 {n} 個接口...', executing:'執行中',
+    batchDone:'執行完成，通過率 {r}', batchError:'批量執行失敗',
+    pleaseSelect:'請選擇至少一個接口', loading:'加載中...',
+    running:'執行中...', apiName:'接口名稱', category:'分類',
+    method:'方法', url:'URL', mark:'標記', updTime:'更新時間',
+    operation:'操作', allCats:'全部分類', allMethods:'所有方法',
+    searchPlaceholder:'搜索接口名/URL...',
+    reportName:'報告名稱', stopOnFail:'失敗立即停止（聯動測試推薦開啟）',
+    sendEmail:'執行後發郵件報告', startBatch:'開始批量執行',
+    runResult:'執行結果', addInterface:'新增接口',
+    redisGetCode:'Redis 取驗證碼→變量', batchTest:'批量執行測試',
+    newTask:'新建定時任務', pressTest:'Locust 壓力測試',
+    newReport:'最近測試報告', quickOps:'快速操作',
+    changePwd:'修改密碼', logout:'退出登錄',
+  },
+  'zh-CN': {
+    appTitle:'API 接口测试平台 v3', dashboard:'控制台', apiList:'接口列表',
+    apiCategory:'接口分类', variables:'全局变量/Token', dbConfig:'MySQL 配置',
+    redisConfig:'Redis 配置', redisTool:'Redis 工具', emailConfig:'邮件配置',
+    scheduler:'定时任务', batchRun:'批量执行', locust:'压力测试 Locust',
+    sqlTool:'SQL 工具', reports:'测试报告', accounts:'账户管理',
+    overview:'总览', apiMgr:'接口管理', dataSrc:'数据源配置',
+    notify:'通知 & 邮件', runReport:'执行 & 报告', sysMgr:'系统管理',
+    addApi:'添加接口', refresh:'刷新', save:'保存', cancel:'取消',
+    delete:'删除', execute:'执行', edit:'编辑', search:'搜索',
+    total:'总数', passed:'通过', failed:'失败', error:'错误',
+    passRate:'通过率', duration:'耗时', viewReport:'查看详细报告',
+    batchRunning:'批量执行 {n} 个接口...', executing:'执行中',
+    batchDone:'执行完成，通过率 {r}', batchError:'批量执行失败',
+    pleaseSelect:'请选择至少一个接口', loading:'加载中...',
+    running:'执行中...', apiName:'接口名称', category:'分类',
+    method:'方法', url:'URL', mark:'标记', updTime:'更新时间',
+    operation:'操作', allCats:'全部分类', allMethods:'所有方法',
+    searchPlaceholder:'搜索接口名/URL...',
+    reportName:'报告名称', stopOnFail:'失败立即停止（联动测试推荐开启）',
+    sendEmail:'执行后发邮件报告', startBatch:'开始批量执行',
+    runResult:'执行结果', addInterface:'新增接口',
+    redisGetCode:'Redis 取验证码→变量', batchTest:'批量执行测试',
+    newTask:'新建定时任务', pressTest:'Locust 压力测试',
+    newReport:'最近测试报告', quickOps:'快速操作',
+    changePwd:'修改密码', logout:'退出登录',
+  },
+  'en': {
+    appTitle:'API Test Platform v3', dashboard:'Dashboard', apiList:'API List',
+    apiCategory:'Categories', variables:'Variables/Token', dbConfig:'MySQL Config',
+    redisConfig:'Redis Config', redisTool:'Redis Tool', emailConfig:'Email Config',
+    scheduler:'Scheduler', batchRun:'Batch Run', locust:'Load Test (Locust)',
+    sqlTool:'SQL Tool', reports:'Test Reports', accounts:'Account Mgmt',
+    overview:'Overview', apiMgr:'API Management', dataSrc:'Data Sources',
+    notify:'Notifications', runReport:'Execution & Reports', sysMgr:'System',
+    addApi:'Add API', refresh:'Refresh', save:'Save', cancel:'Cancel',
+    delete:'Delete', execute:'Run', edit:'Edit', search:'Search',
+    total:'Total', passed:'Passed', failed:'Failed', error:'Error',
+    passRate:'Pass Rate', duration:'Duration', viewReport:'View Report',
+    batchRunning:'Running {n} APIs...', executing:'Executing',
+    batchDone:'Done, pass rate {r}', batchError:'Batch execution failed',
+    pleaseSelect:'Please select at least one API', loading:'Loading...',
+    running:'Running...', apiName:'API Name', category:'Category',
+    method:'Method', url:'URL', mark:'Tags', updTime:'Updated',
+    operation:'Actions', allCats:'All Categories', allMethods:'All Methods',
+    searchPlaceholder:'Search API name/URL...',
+    reportName:'Report Name', stopOnFail:'Stop on failure (recommended for linked tests)',
+    sendEmail:'Send email report after run', startBatch:'Start Batch Run',
+    runResult:'Execution Result', addInterface:'Add New API',
+    redisGetCode:'Redis → Get Code to Variable', batchTest:'Batch Test',
+    newTask:'New Scheduled Task', pressTest:'Locust Load Test',
+    newReport:'Recent Reports', quickOps:'Quick Actions',
+    changePwd:'Change Password', logout:'Logout',
+  },
+  'ja': {
+    appTitle:'APIテストプラットフォーム v3', dashboard:'ダッシュボード', apiList:'API一覧',
+    apiCategory:'カテゴリ', variables:'グローバル変数/Token', dbConfig:'MySQL設定',
+    redisConfig:'Redis設定', redisTool:'Redisツール', emailConfig:'メール設定',
+    scheduler:'スケジューラ', batchRun:'一括実行', locust:'負荷テスト (Locust)',
+    sqlTool:'SQLツール', reports:'テストレポート', accounts:'アカウント管理',
+    overview:'概要', apiMgr:'API管理', dataSrc:'データソース設定',
+    notify:'通知 & メール', runReport:'実行 & レポート', sysMgr:'システム管理',
+    addApi:'API追加', refresh:'更新', save:'保存', cancel:'キャンセル',
+    delete:'削除', execute:'実行', edit:'編集', search:'検索',
+    total:'合計', passed:'成功', failed:'失敗', error:'エラー',
+    passRate:'成功率', duration:'所要時間', viewReport:'詳細レポートを見る',
+    batchRunning:'{n}件のAPIを実行中...', executing:'実行中',
+    batchDone:'完了、成功率 {r}', batchError:'一括実行失敗',
+    pleaseSelect:'少なくとも1つのAPIを選択してください', loading:'読み込み中...',
+    running:'実行中...', apiName:'API名', category:'カテゴリ',
+    method:'メソッド', url:'URL', mark:'タグ', updTime:'更新日時',
+    operation:'操作', allCats:'全カテゴリ', allMethods:'全メソッド',
+    searchPlaceholder:'API名/URLを検索...',
+    reportName:'レポート名', stopOnFail:'失敗時に停止（連携テスト推奨）',
+    sendEmail:'実行後にメールレポートを送信', startBatch:'一括実行開始',
+    runResult:'実行結果', addInterface:'新規API追加',
+    redisGetCode:'Redis → 認証コードを変数へ', batchTest:'一括テスト',
+    newTask:'新規スケジュールタスク', pressTest:'Locust負荷テスト',
+    newReport:'最近のレポート', quickOps:'クイック操作',
+    changePwd:'パスワード変更', logout:'ログアウト',
+  }
+};
+let _curLang = localStorage.getItem('ui_lang') || 'zh-TW';
+function T(key) {
+  return (LANGS[_curLang] || LANGS['zh-TW'])[key] || (LANGS['zh-TW'][key] || key);
+}
+function setLang(lang) {
+  _curLang = lang;
+  localStorage.setItem('ui_lang', lang);
+  applyLang();
+}
+function applyLang() {
+  try {
+    const L = LANGS[_curLang] || LANGS['zh-TW'];
+    // Sync selector
+    try { const sel=$('langSel'); if(sel) sel.value=_curLang; } catch(e){}
+    // data-i18n elements
+    try {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        try { const k=el.getAttribute('data-i18n'); if(L[k]) el.textContent=L[k]; } catch(e){}
+      });
+    } catch(e){}
+    // Sidebar nav buttons - rebuild text safely without touching event listeners
+    try {
+      const pageMap = {
+        dashboard:'dashboard', apis:'apiList', categories:'apiCategory',
+        variables:'variables', databases:'dbConfig', redis:'redisConfig',
+        redis_tool:'redisTool', email:'emailConfig', scheduler:'scheduler',
+        runner:'batchRun', locust:'locust', sql_tool:'sqlTool',
+        reports:'reports', accounts:'accounts',
+      };
+      document.querySelectorAll('.nb[data-page]').forEach(btn => {
+        try {
+          const page = btn.getAttribute('data-page');
+          if (!pageMap[page] || !L[pageMap[page]]) return;
+          const icon = btn.querySelector('i');
+          // Only update the text node, keep icon via childNodes manipulation
+          // Remove all child nodes except the icon
+          while (btn.firstChild) btn.removeChild(btn.firstChild);
+          if (icon) btn.appendChild(icon);
+          btn.appendChild(document.createTextNode(L[pageMap[page]]));
+        } catch(e){}
+      });
+    } catch(e){}
+    // Group labels
+    try {
+      const grpMap = ['overview','apiMgr','dataSrc','notify','runReport'];
+      const grps = [...document.querySelectorAll('.grp')].filter(g=>!g.classList.contains('admin-only'));
+      grps.forEach((g,i) => { try { if(grpMap[i]&&L[grpMap[i]]) g.textContent=L[grpMap[i]]; } catch(e){} });
+      const adminGrp = document.querySelector('.grp.admin-only');
+      if (adminGrp && L.sysMgr) adminGrp.textContent = L.sysMgr;
+    } catch(e){}
+    // Search placeholder
+    try { const s=$('apiSrc'); if(s) s.placeholder=L.searchPlaceholder||''; } catch(e){}
+    // Tooltips
+    try {
+      document.querySelectorAll('.sb-action-btn[title]').forEach(btn => {
+        try {
+          const t = btn.getAttribute('title');
+          if (['修改密碼','Change Password','パスワード変更','修改密码'].includes(t))
+            btn.setAttribute('title', L.changePwd);
+          if (['退出登錄','Logout','ログアウト','退出登录'].includes(t))
+            btn.setAttribute('title', L.logout);
+        } catch(e){}
+      });
+    } catch(e){}
+  } catch(e) {
+    console.warn('[i18n] applyLang error (non-fatal):', e);
+  }
+}
+// ══════════════════════════════════════════════
 // ══════════ STATE ══════════
 const S = {apiPg:1, varPg:1, rptPg:1, curCat:'', cats:[], dbs:[], redis:[],
            lstTaskId:null, lstPollTimer:null};
@@ -904,7 +1098,7 @@ function toast(msg, t='success') {
   $('tc').appendChild(e);
   setTimeout(() => e.remove(), 3500);
 }
-function load(show, t='執行中...') { $('lov').style.display = show ? 'flex' : 'none'; $('lt').textContent = t; }
+function load(show, t='執行中...') { const lov=$('lov'); lov.style.display=show?'flex':'none'; $('lt').textContent=t; if(show) lov._showTime=Date.now(); else delete lov._showTime; }
 async function R(method, url, body=null) {
   const o = {method, credentials:'same-origin', headers:{'Content-Type':'application/json'}};
   if (body) o.body = JSON.stringify(body);
@@ -1072,7 +1266,7 @@ async function loadApis(p) {
     '<td><span class="badge bg-light text-secondary">'+eh(a.category_name)+'</span></td>' +
     '<td><span class="bm '+a.method.toLowerCase()+'">'+a.method+'</span></td>' +
     '<td class="text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eh(a.url)+'">'+eh(a.url)+'</td>' +
-    '<td>'+(a.encrypted?'<span class="badge bg-warning text-dark"><i class="fas fa-lock"></i></span>':'')+' '+(a.use_async?'<span class="at2">async</span>':'')+' '+(a.use_session?'<span class="badge bg-info">session</span>':'')+'</td>' +
+    '<td>'+(a.encrypted?'<span class="badge bg-warning text-dark"><i class="fas fa-lock"></i></span>':'')+' '+(a.use_async?'<span class="at2">async</span>':'')+' '+(a.use_session?'<span class="badge bg-info">session</span>':'')+' '+(a.repeat_enabled?'<span class="badge text-white" style="background:#6f42c1">×'+a.repeat_count+'</span>':'')+'</td>' +
     '<td class="text-muted small">'+a.updated_at+'</td>' +
     '<td>' +
     '<button class="btn bi btn-outline-success btn-sm me-1" onclick="run1('+a.id+')" title="執行"><i class="fas fa-play fa-xs"></i></button>' +
@@ -1116,7 +1310,7 @@ function clearApiForm() {
   ['apiId','apiName','apiUrl','apiDesc','apiHdr','apiPrm','apiBdy','apiEncKey','apiPreSql','apiPostSql'].forEach(id => { const e=$(id); if(e) e.value=''; });
   $('apiMth').value='POST'; $('apiBodyType').value='json'; $('apiCat').value='';
   $('apiSort').value='0'; $('apiTimeout').value='30';
-  $('apiAsync').checked=false; $('apiSession').checked=false; $('apiEnc').checked=false;
+  $('apiAsync').checked=false; $('apiSession').checked=false; $('apiRepeatEnabled').checked=false; $('apiRepeatCount').value=1; togRepeat(); $('apiEnc').checked=false;
   $('apiEncAlgo').value=''; $('apiEncKey').value='';
   const sv = $('apiSslVerify'); if(sv) sv.value='true';
   const sc = $('apiSslCertPath'); if(sc) sc.value='';
@@ -1156,6 +1350,7 @@ async function editApi(id) {
   $('apiPrm').value=a.params||'{}';
   $('apiBdy').value=a.body||'{}';
   $('apiAsync').checked=a.use_async; $('apiSession').checked=a.use_session;
+  if ($('apiRepeatEnabled')) { $('apiRepeatEnabled').checked=!!a.repeat_enabled; $('apiRepeatCount').value=a.repeat_count||1; togRepeat(); }
   $('apiEnc').checked=a.encrypted;
   $('apiEncAlgo').value=a.encryption_algorithm||'';
   const sv = $('apiSslVerify'); if(sv) sv.value = a.ssl_verify||'true';
@@ -1186,6 +1381,12 @@ async function editApi(id) {
   // ④ 最後更新 UI 狀態後開啟 Modal
   $('apiMT').textContent='編輯接口'; togApiBody(); updBodyTypeHint();
   bootstrap.Modal.getOrCreateInstance($('apiModal')).show();
+}
+function togRepeat() {
+  const on = $('apiRepeatEnabled')?.checked;
+  const wrap = $('repeatCountWrap');
+  if (wrap) wrap.style.display = on ? '' : 'none';
+  if (on && +($('apiRepeatCount')?.value||0) < 1) $('apiRepeatCount').value = 1;
 }
 function togApiBody() {
   const mth = $('apiMth').value;
@@ -1730,6 +1931,7 @@ function colApiData() {
     params:  ($('apiPrm').value||'').trim() || '{}',
     body:    $('apiBdy').value || '{}',
     use_async:$('apiAsync').checked, use_session:$('apiSession').checked,
+    repeat_enabled:!!$('apiRepeatEnabled')?.checked, repeat_count:+($('apiRepeatCount')?.value||1)||1,
     encrypted:$('apiEnc').checked,
     encryption_key:$('apiEncKey').value,
     encryption_algorithm: algo || 'AES',
@@ -1776,20 +1978,47 @@ async function saveRunApi() {
   run1(r.data.id);
 }
 async function run1(id) {
-  load(true,'執行接口...');
-  const r = await R('POST','/api/apis/'+id+'/run/',{});
-  load(false); showRun(r.data);
+  load(true, '執行接口...');
+  const r = await R('POST', '/api/apis/' + id + '/run/', {});
+  load(false);
+  showRun(r.data);
 }
 function showRun(data) {
-  if (!data) { toast('執行失敗','danger'); return; }
-  const sc = data.status==='pass'?'success':data.status==='fail'?'danger':'warning';
-  const hc = data.response_status>=200&&data.response_status<300?'success':'danger';
+  if (!data) { toast('執行失敗', 'danger'); return; }
+  const sc = data.status === 'pass' ? 'success' : data.status === 'fail' ? 'danger' : 'warning';
+  const hc = data.response_status >= 200 && data.response_status < 300 ? 'success' : 'danger';
   let h = '<div class="d-flex gap-2 mb-3 flex-wrap align-items-center">' +
-    '<span class="badge bg-'+sc+' fs-6 px-3 py-2">'+(data.status==='pass'?'✓ 通過':data.status==='fail'?'✗ 失敗':'⚠ 錯誤')+'</span>' +
-    '<span class="badge bg-'+hc+'">HTTP '+data.response_status+'</span>' +
-    '<span class="badge bg-secondary">'+data.response_time+'ms</span>' +
-    (data.use_async?'<span class="at2">httpx async</span>':'') +
-    (data.use_session?'<span class="badge bg-info">Session</span>':'') + '</div>';
+    '<span class="badge bg-' + sc + ' fs-6 px-3 py-2">' + (data.status === 'pass' ? '✓ 通過' : data.status === 'fail' ? '✗ 失敗' : '⚠ 錯誤') + '</span>' +
+    '<span class="badge bg-' + hc + '">HTTP ' + data.response_status + '</span>' +
+    '<span class="badge bg-secondary">' + data.response_time + 'ms</span>' +
+    (data.repeat_count && data.repeat_count > 1 ? '<span class="badge bg-purple text-white" style="background:#6f42c1">× ' + data.repeat_count + ' 次</span>' : '') +
+    (data.use_async ? '<span class="at2">httpx async</span>' : '') +
+    (data.use_session ? '<span class="badge bg-info">Session</span>' : '') + '</div>';
+
+  // 幂等性測試摘要
+  if (data.repeat_summary) {
+    const rs = data.repeat_summary;
+    const allPass = rs.passed === rs.total;
+    const consistent = rs.consistent_status && rs.consistent_result;
+    h += '<div class="border rounded p-2 mb-3" style="background:' + (allPass ? '#f0fff4' : '#fff8f0') + '">' +
+      '<div class="d-flex align-items-center gap-2 mb-2">' +
+        '<strong style="font-size:.9rem">🔄 幂等性測試 × ' + rs.total + ' 次</strong>' +
+        '<span class="badge bg-' + (allPass ? 'success' : 'danger') + '">' + rs.pass_rate + '% 通過</span>' +
+        '<span class="badge bg-' + (consistent ? 'success' : 'warning text-dark') + '">' + (consistent ? '✓ 結果一致' : '⚠ 結果不一致') + '</span>' +
+      '</div>' +
+      '<div class="d-flex gap-3 small">' +
+        '<span class="text-success">✓ 通過 ' + rs.passed + '</span>' +
+        (rs.failed ? '<span class="text-danger">✗ 失敗 ' + rs.failed + '</span>' : '') +
+        (rs.error ? '<span class="text-warning">⚠ 錯誤 ' + rs.error + '</span>' : '') +
+        '<span class="text-muted">平均 ' + rs.avg_time + 'ms</span>' +
+        '<span class="text-muted">最快 ' + rs.min_time + 'ms</span>' +
+        '<span class="text-muted">最慢 ' + rs.max_time + 'ms</span>' +
+      '</div>' +
+      '<div class="mt-1 small text-muted">' +
+        'HTTP 狀態碼序列：' + rs.statuses.map(s => '<span class="badge bg-' + (s >= 200 && s < 300 ? 'success' : 'danger') + ' me-1">' + s + '</span>').join('') +
+      '</div>' +
+    '</div>';
+  }
   if (data.enc_applied?.length) {
     h += '<div class="mb-2"><strong>字段加密 <span class="badge bg-danger">AES-GCM</span>：</strong> ' +
       data.enc_applied.map(r=>'<code>'+eh(r.field)+'</code>').join(' · ') + '</div>';
@@ -2235,33 +2464,60 @@ function updRnrBadges() {
 }
 function rmRnr(id) { S.rnrSel.delete(id); const cb=document.querySelector('.rnr-cb[value="'+id+'"]'); if(cb)cb.checked=false; updRnrBadges(); }
 async function runBatch() {
-  const ids=[...S.rnrSel]; if(!ids.length){toast('請選擇至少一個接口','warning');return;}
-  load(true,'批量執行 '+ids.length+' 個接口...');
-  const stopOnFail = !!$('rnrStopOnFail')?.checked;
-  const body={api_ids:ids, report_name:$('rnrName').value.trim(), stop_on_failure: stopOnFail};
-  const r = await R('POST','/api/run/batch/',body);
-  load(false);
-  if (r.code!==0){toast(r.message,'danger');return;}
-  const d=r.data;
-  const pc=d.pass_rate===100?'success':d.pass_rate>=60?'warning':'danger';
-  const fw=d.total>0?(d.failed/d.total*100).toFixed(1):0;
-  const ew=d.total>0?(d.error/d.total*100).toFixed(1):0;
+  const ids=[...S.rnrSel];
+  if(!ids.length){toast(T('pleaseSelect'),'warning');return;}
+  const stopOnFail=!!$('rnrStopOnFail')?.checked;
+  const body={api_ids:ids,report_name:$('rnrName').value.trim(),stop_on_failure:stopOnFail};
+  load(true, T('batchRunning').replace('{n}', ids.length));
+  const r=await R('POST','/api/run/batch/',body);
+  if(r.code!==0){load(false);toast(r.message,'danger');return;}
+  const taskId=r.data.task_id;
+  // 輪詢進度，避免頁面長時間無響應
   $('rnrRes').style.display='';
-  $('rnrResBody').innerHTML =
-    '<div class="row g-2 mb-2 text-center">' +
-    '<div class="col-3"><div class="fw-bold fs-5">'+d.total+'</div><div class="text-muted small">總數</div></div>' +
-    '<div class="col-3"><div class="fw-bold fs-5 text-success">'+d.passed+'</div><div class="text-muted small">通過</div></div>' +
-    '<div class="col-3"><div class="fw-bold fs-5 text-danger">'+d.failed+'</div><div class="text-muted small">失敗</div></div>' +
-    '<div class="col-3"><div class="fw-bold fs-5 text-warning">'+d.error+'</div><div class="text-muted small">錯誤</div></div></div>' +
-    '<div class="rbar mb-2"><div class="rp" style="width:'+d.pass_rate+'%"></div><div class="rf" style="width:'+fw+'%"></div><div class="re" style="width:'+ew+'%"></div></div>' +
-    '<div class="d-flex justify-content-between small mb-3"><span>通過率：<strong class="text-'+pc+'">'+d.pass_rate+'%</strong></span><span>耗時：'+d.duration+'s</span></div>';
-  // 郵件
-  if ($('rnrEmail').checked && $('rnrEmailTo').value.trim()) {
-    const er = await R('POST','/api/email/send-report/',{report_id:d.report_id,email_to:$('rnrEmailTo').value.trim()});
-    $('rnrResBody').innerHTML += '<div class="alert '+(er.code===0?'alert-success':'alert-warning')+' py-2 small mb-2"><i class="fas fa-envelope me-1"></i>'+(er.data?.message||er.message)+'</div>';
-  }
-  $('rnrResBody').innerHTML += '<button class="btn btn-outline-primary w-100 btn-sm" onclick="showRpt('+d.report_id+')"><i class="fas fa-file-alt me-1"></i>查看詳細報告</button>';
-  toast('執行完成，通過率 '+d.pass_rate+'%', d.pass_rate===100?'success':'warning');
+  $('rnrResBody').innerHTML='<div class="text-center py-3"><div class="spinner-border spinner-border-sm me-2"></div><span id="batchProg">'+T('batchRunning').replace('{n}',ids.length)+'</span></div>';
+  const pollTimer=setInterval(async()=>{
+    try {
+      const pr=await R('GET','/api/run/batch/status/'+taskId+'/');
+      if(!pr||pr.code!==0){clearInterval(pollTimer);load(false);toast((pr&&pr.message)||T('batchError'),'danger');return;}
+      const t=pr.data;
+      if(!t){clearInterval(pollTimer);load(false);toast(T('batchError'),'danger');return;}
+      const prog=$('batchProg');
+      if(t.status==='running'){
+        if(prog) prog.textContent=T('executing')+' '+t.progress+'/'+t.total+'...';
+      } else if(t.status==='completed'||t.status==='error'){
+        clearInterval(pollTimer);load(false);
+        if(t.status==='error'){toast(t.error||T('batchError'),'danger');return;}
+        const d=t.report||{total:0,passed:0,failed:0,error:0,pass_rate:0,duration:0,report_id:null};
+        const pc=d.pass_rate===100?'success':d.pass_rate>=60?'warning':'danger';
+        const fw=d.total>0?(d.failed/d.total*100).toFixed(1):0;
+        const ew=d.total>0?(d.error/d.total*100).toFixed(1):0;
+        $('rnrResBody').innerHTML=
+          '<div class="row g-2 mb-2 text-center">'+
+          '<div class="col-3"><div class="fw-bold fs-5">'+d.total+'</div><div class="text-muted small">'+T('total')+'</div></div>'+
+          '<div class="col-3"><div class="fw-bold fs-5 text-success">'+d.passed+'</div><div class="text-muted small">'+T('passed')+'</div></div>'+
+          '<div class="col-3"><div class="fw-bold fs-5 text-danger">'+d.failed+'</div><div class="text-muted small">'+T('failed')+'</div></div>'+
+          '<div class="col-3"><div class="fw-bold fs-5 text-warning">'+d.error+'</div><div class="text-muted small">'+T('error')+'</div></div></div>'+
+          '<div class="rbar mb-2"><div class="rp" style="width:'+d.pass_rate+'%"></div><div class="rf" style="width:'+fw+'%"></div><div class="re" style="width:'+ew+'%"></div></div>'+
+          '<div class="d-flex justify-content-between small mb-3"><span>'+T('passRate')+'：<strong class="text-'+pc+'">'+d.pass_rate+'%</strong></span><span>'+T('duration')+'：'+d.duration+'s</span></div>';
+        if(d.report_id){
+          if($('rnrEmail')&&$('rnrEmail').checked&&$('rnrEmailTo')&&$('rnrEmailTo').value.trim()){
+            try{
+              const er=await R('POST','/api/email/send-report/',{report_id:d.report_id,email_to:$('rnrEmailTo').value.trim()});
+              $('rnrResBody').innerHTML+='<div class="alert '+(er.code===0?'alert-success':'alert-warning')+' py-2 small mb-2"><i class="fas fa-envelope me-1"></i>'+(er.data?.message||er.message)+'</div>';
+            }catch(e){}
+          }
+          $('rnrResBody').innerHTML+='<button class="btn btn-outline-primary w-100 btn-sm" onclick="showRpt('+d.report_id+')"><i class="fas fa-file-alt me-1"></i>'+T('viewReport')+'</button>';
+        }
+        toast(T('batchDone').replace('{r}',d.pass_rate+'%'), d.pass_rate===100?'success':'warning');
+      }
+    } catch(pollErr) {
+      // 任何未預期錯誤：清除定時器，確保 loading 遮罩消失，頁面恢復可操作
+      clearInterval(pollTimer);
+      load(false);
+      console.error('[runBatch] poll error:', pollErr);
+      toast(T('batchError'),'danger');
+    }
+  }, 1000);
 }
 
 // ══════════ LOCUST ══════════
@@ -2468,6 +2724,7 @@ async function showRpt(id) {
 
 // ══════════ INIT ══════════
 document.addEventListener('DOMContentLoaded', () => {
+  try { applyLang(); } catch(e) { console.warn('[i18n] init error:', e); }  // 語言初始化，錯誤不影響頁面
   initAuth();   // 先驗證登錄狀態，未登錄跳轉到 /login
   // Pre-load global data
   R('GET','/api/db/configs/').then(r=>{ if(r.code===0) S.dbs=r.data||[]; });
@@ -2480,6 +2737,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (apiBodyType) apiBodyType.addEventListener('change', updBodyTypeHint);
   const apiMth = $('apiMth');
   if (apiMth) apiMth.addEventListener('change', togApiBody);
+  // 保險：loading 遮罩最多顯示 90 秒，防止任何未預期錯誤卡死頁面
+  setInterval(() => {
+    const lov = document.getElementById('lov');
+    if (lov && lov.style.display !== 'none' && lov._showTime && (Date.now() - lov._showTime > 90000)) {
+      load(false);
+      console.warn('[Safety] loading overlay force-dismissed after 90s');
+    }
+  }, 5000);
   // 內建動態變量 badge 點擊複製
   document.querySelectorAll('.badge[title] code, code.badge[title]').forEach(el => {
     el.style.cursor = 'pointer';
