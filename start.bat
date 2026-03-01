@@ -1,7 +1,22 @@
 @echo off
-chcp 65001 >nul
-echo 启动 API 测试平台 v2...
-call venv\Scripts\activate.bat
-echo 访问: http://127.0.0.1:8000  (Ctrl+C 停止)
-python manage.py runserver 0.0.0.0:8000
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
+title API Test Platform v4
+
+if not exist "venv\Scripts\python.exe" (
+    echo Not installed yet. Run setup.bat first.
+    pause & exit /b 1
+)
+
+venv\Scripts\python manage.py migrate --verbosity 0 2>nul
+
+set PORT=8000
+netstat -an 2>nul | findstr /C:":8000 " | findstr /C:"LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    set PORT=8080
+)
+
+start /b cmd /c "timeout /t 2 >nul && start http://127.0.0.1:!PORT!"
+echo Starting at http://127.0.0.1:!PORT!
+venv\Scripts\python manage.py runserver 0.0.0.0:!PORT!
 pause

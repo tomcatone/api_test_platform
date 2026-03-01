@@ -292,14 +292,72 @@ def run_assertions(assertions: list, response_status: int, response_data) -> lis
                 item.update({'actual': actual, 'passed': passed,
                              'message': f'路徑[{path}] {"非空" if passed else "為空"}'})
             elif a_type == 'regex':
+                extra     = rule.get('extra', {}) or {}
+                target    = extra.get('target', 'body')       # body / json_path / header / status
+                mode      = extra.get('mode', 'search')       # search / fullmatch / findall / not_match
+                cap_group = extra.get('cap_group', '')        # 擷取群組編號或名稱
+                flags_str = extra.get('flags', '')            # i / m / s 組合
+
+                # 組合 re flags
+                rx_flags = 0
+                if 'i' in flags_str: rx_flags |= re.IGNORECASE
+                if 'm' in flags_str: rx_flags |= re.MULTILINE
+                if 's' in flags_str: rx_flags |= re.DOTALL
+
+                # 決定比對主體
                 path = rule.get('path', '')
-                actual = extract_value(response_data, path) if path else str(response_data)
+                if target == 'json_path' and path:
+                    subject = str(extract_value(response_data, path) or '')
+                elif target == 'status':
+                    subject = str(response_status)
+                else:
+                    # body（預設）
+                    subject = (json.dumps(response_data, ensure_ascii=False)
+                               if isinstance(response_data, (dict, list))
+                               else str(response_data or ''))
+                # header 由外部傳入時才有值，這裡對 body fallback
+                actual = subject[:200]   # 顯示用截斷
+
+                passed      = False
+                detail      = ''
+                captured    = None
                 try:
-                    passed = bool(re.search(str(expected), str(actual)))
-                except Exception:
-                    passed = False
-                item.update({'actual': actual, 'passed': passed,
-                             'message': f'正則[{path}]"{actual}" {"匹配" if passed else "不匹配"} /{expected}/'})
+                    rx = re.compile(str(expected), rx_flags)
+                    if mode == 'search':
+                        m = rx.search(subject)
+                        passed = bool(m)
+                        if m:
+                            detail = f'匹配："{m.group(0)[:80]}"'
+                            if cap_group:
+                                try:
+                                    g = m.group(int(cap_group)) if cap_group.isdigit() else m.group(cap_group)
+                                    captured = g
+                                    detail += f'  群組[{cap_group}]="{g}"'
+                                except (IndexError, re.error):
+                                    detail += f'  群組[{cap_group}]=未找到'
+                    elif mode == 'fullmatch':
+                        m = rx.fullmatch(subject)
+                        passed = bool(m)
+                        detail = '整體匹配通過' if passed else '整體匹配失敗'
+                    elif mode == 'findall':
+                        all_m   = rx.findall(subject)
+                        min_cnt = int(expected) if str(expected).isdigit() else 1
+                        passed  = len(all_m) >= min_cnt
+                        detail  = f'找到 {len(all_m)} 個（期望 >= {min_cnt}）'
+                    elif mode == 'not_match':
+                        m      = rx.search(subject)
+                        passed = not bool(m)
+                        detail = '確認不匹配（通過）' if passed else f'意外匹配："{(m.group(0) if m else "")[:60]}"'
+                except re.error as rx_err:
+                    detail = f'正則語法錯誤：{rx_err}'
+
+                flag_label = ('i' if 'i' in flags_str else '') + ('m' if 'm' in flags_str else '') + ('s' if 's' in flags_str else '')
+                msg = (f'[RegEx/{mode}] /{expected}/{flag_label} '
+                       f'對 {target}{"["+path+"]" if path else ""} → '
+                       f'{"✓ " if passed else "✗ "}{detail}')
+
+                item.update({'actual': actual, 'passed': passed, 'message': msg,
+                             'captured': captured, 'regex_detail': detail})
 
             results.append(item)
         except Exception as e:

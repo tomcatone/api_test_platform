@@ -105,6 +105,15 @@
 .cronhelp{background:#f8fafc;border-radius:7px;padding:9px 12px;font-size:.75rem;color:#475569;line-height:1.9}
 .cronhelp code{background:#e2e8f0;padding:1px 4px;border-radius:3px;color:#7c3aed}
 .ts-active{color:var(--ok);font-weight:600}.ts-paused{color:var(--warn);font-weight:600}.ts-stopped{color:#94a3b8}
+.rx-highlight-match{background:#ffd700;border-radius:2px;color:#1a1a1a;padding:0 1px}
+.rx-highlight-match.rx-m0{background:#ff6b6b;color:#fff}
+.rx-highlight-match.rx-m1{background:#51cf66;color:#fff}
+.rx-highlight-match.rx-m2{background:#339af0;color:#fff}
+.rx-highlight-match.rx-m3{background:#f06595;color:#fff}
+.rx-highlight-match.rx-m4{background:#cc5de8;color:#fff}
+.rx-flag{font-family:monospace;font-size:.75rem;padding:1px 6px;font-weight:700}
+.rx-flag.active{background:#0d6efd;color:#fff;border-color:#0d6efd}
+.rx-preset{cursor:pointer;font-size:.72rem;padding:2px 8px;border-radius:20px}
 .locust-stat{text-align:center;background:#f8fafc;border-radius:9px;padding:12px 8px}
 .locust-stat .val{font-size:1.3rem;font-weight:700;color:#1e293b}
 .locust-stat .lbl{font-size:.72rem;color:#64748b}
@@ -117,6 +126,9 @@
 .lst-grade{display:inline-block;font-size:1.1rem;font-weight:800;border-radius:50%;width:36px;height:36px;line-height:36px;text-align:center}
 .lst-timeline{display:flex;align-items:flex-end;gap:2px;height:48px;margin:4px 0}
 .lst-timeline .bar{flex:1;border-radius:3px 3px 0 0;min-height:4px;transition:height .4s}
+.as-rxopts{border-color:#c7d2fe!important}
+.as-rxresult{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:4px 8px}
+.as-rxresult.fail{background:#fff1f2;border-color:#fecdd3}
 .pulse{animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 </style>
@@ -154,6 +166,7 @@
     <button class="nb" data-page="runner"><i class="fas fa-play-circle"></i>批量執行</button>
     <button class="nb" data-page="locust"><i class="fas fa-bug"></i>壓力測試 Locust</button>
     <button class="nb" data-page="sql_tool"><i class="fas fa-table"></i>SQL 工具</button>
+    <button class="nb" data-page="regex_tool"><i class="fas fa-search"></i>正則工具</button>
     <button class="nb" data-page="reports"><i class="fas fa-chart-bar"></i>測試報告</button>
     <!-- 管理員專屬：賬戶管理 -->
     <div class="grp admin-only" style="display:none">系統管理</div>
@@ -251,6 +264,131 @@
   <div class="tw"><table class="table"><thead><tr><th>變量名</th><th>類型</th><th>值</th><th>描述</th><th>更新</th><th>操作</th></tr></thead>
   <tbody id="varTb"></tbody></table>
   <div class="pgw"><div class="text-muted small" id="varTot">共 0 條</div><nav><ul class="pagination pagination-sm" id="varPg"></ul></nav></div></div>
+</div>
+
+<!-- ═══ REGEX TOOL ═══ -->
+<div id="page-regex_tool" class="page">
+  <div class="ph"><h1 class="pt"><i class="fas fa-search me-2 text-primary"></i>正則表達式驗證工具</h1></div>
+  <div class="row g-3">
+
+    <!-- 左欄：輸入區 -->
+    <div class="col-lg-5">
+
+      <!-- 正則表達式輸入 -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-code me-1 text-primary"></i>正則表達式</span>
+          <div class="d-flex gap-1">
+            <span id="rxFlagBtns">
+              <button class="btn btn-xs btn-outline-secondary rx-flag" data-flag="g" title="全局匹配">g</button>
+              <button class="btn btn-xs btn-outline-secondary rx-flag" data-flag="i" title="不區分大小寫">i</button>
+              <button class="btn btn-xs btn-outline-secondary rx-flag" data-flag="m" title="多行模式">m</button>
+              <button class="btn btn-xs btn-outline-secondary rx-flag" data-flag="s" title="點號匹配換行">s</button>
+            </span>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div class="input-group">
+            <span class="input-group-text text-muted">/</span>
+            <input type="text" class="form-control font-monospace" id="rxPattern"
+              placeholder="輸入正則表達式，如 \d{3}-\d{4}" oninput="rxRun()">
+            <span class="input-group-text text-muted" id="rxFlagDisplay">/<span id="rxFlagStr">g</span></span>
+          </div>
+          <div id="rxPatternErr" class="text-danger small mt-1" style="min-height:18px"></div>
+        </div>
+      </div>
+
+      <!-- 測試字符串 -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-align-left me-1 text-primary"></i>測試字符串</span>
+          <button class="btn btn-xs btn-outline-secondary" onclick="rxClearInput()">清空</button>
+        </div>
+        <div class="card-body p-2">
+          <textarea class="form-control font-monospace" id="rxInput" rows="8"
+            placeholder="輸入要測試的文本..." oninput="rxRun()"></textarea>
+        </div>
+      </div>
+
+      <!-- 替換功能 -->
+      <div class="card mb-3">
+        <div class="card-header"><i class="fas fa-exchange-alt me-1 text-warning"></i>替換</div>
+        <div class="card-body p-2">
+          <div class="input-group mb-2">
+            <span class="input-group-text small text-muted">替換為</span>
+            <input type="text" class="form-control font-monospace" id="rxReplace"
+              placeholder="替換字符串，支持 $1 $2 等分組引用" oninput="rxRun()">
+          </div>
+          <div class="p-2 rounded" style="background:#f8fafc;min-height:60px;font-family:monospace;font-size:.82rem;word-break:break-all" id="rxReplaceOut">
+            <span class="text-muted">替換結果將顯示在此...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 常用正則庫 -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-book me-1 text-success"></i>常用正則庫</div>
+        <div class="card-body p-2">
+          <div class="d-flex flex-wrap gap-1" id="rxPresets"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 右欄：結果區 -->
+    <div class="col-lg-7">
+
+      <!-- 匹配結果統計 -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-chart-bar me-1 text-primary"></i>匹配結果</span>
+          <span id="rxMatchBadge" class="badge bg-secondary">等待輸入</span>
+        </div>
+        <div class="card-body p-2">
+          <div class="row g-2 text-center mb-2" id="rxStats" style="display:none">
+            <div class="col-3"><div class="locust-stat"><div class="val text-success" id="rxMatchCount">0</div><div class="lbl">匹配次數</div></div></div>
+            <div class="col-3"><div class="locust-stat"><div class="val text-primary" id="rxGroupCount">0</div><div class="lbl">捕獲組數</div></div></div>
+            <div class="col-3"><div class="locust-stat"><div class="val" id="rxInputLen">0</div><div class="lbl">輸入長度</div></div></div>
+            <div class="col-3"><div class="locust-stat"><div class="val" id="rxTestTime">0ms</div><div class="lbl">耗時</div></div></div>
+          </div>
+
+          <!-- 高亮預覽 -->
+          <div class="fst mb-1">匹配高亮預覽</div>
+          <div class="p-2 rounded border" id="rxHighlight"
+            style="min-height:80px;max-height:240px;overflow-y:auto;font-family:monospace;font-size:.82rem;word-break:break-all;white-space:pre-wrap;line-height:1.7">
+            <span class="text-muted">輸入正則與文本後自動高亮...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 匹配詳情列表 -->
+      <div class="card mb-3" id="rxDetailCard" style="display:none">
+        <div class="card-header"><i class="fas fa-list me-1 text-primary"></i>匹配詳情（每一條）</div>
+        <div class="card-body p-2" style="max-height:320px;overflow-y:auto">
+          <table class="table table-sm table-bordered mb-0" style="font-size:.78rem">
+            <thead class="table-dark">
+              <tr><th>#</th><th>匹配內容</th><th>起始位置</th><th>結束位置</th><th>捕獲組</th></tr>
+            </thead>
+            <tbody id="rxMatchTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 分組提取 -->
+      <div class="card" id="rxGroupCard" style="display:none">
+        <div class="card-header"><i class="fas fa-layer-group me-1 text-primary"></i>捕獲組提取</div>
+        <div class="card-body p-2" style="max-height:240px;overflow-y:auto">
+          <table class="table table-sm table-bordered mb-0" style="font-size:.78rem">
+            <thead class="table-dark">
+              <tr><th>匹配#</th><th>組1</th><th>組2</th><th>組3</th><th>組4</th><th>組5</th></tr>
+            </thead>
+            <tbody id="rxGroupTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- ═══ ACCOUNTS ═══ -->
@@ -1047,7 +1185,7 @@ function applyLang() {
         dashboard:'dashboard', apis:'apiList', categories:'apiCategory',
         variables:'variables', databases:'dbConfig', redis:'redisConfig',
         redis_tool:'redisTool', email:'emailConfig', scheduler:'scheduler',
-        runner:'batchRun', locust:'locust', sql_tool:'sqlTool',
+        runner:'batchRun', locust:'locust', sql_tool:'sqlTool', regex_tool:'regexTool',
         reports:'reports', accounts:'accounts',
       };
       document.querySelectorAll('.nb[data-page]').forEach(btn => {
@@ -1177,6 +1315,7 @@ function go(name) {
     runner: () => { loadCats(); loadRnrApis(); },
     locust: loadLocustApis,
     sql_tool: loadSqlDbs,
+    regex_tool: rxInit,
     reports: loadRpts
   };
   map[name] && map[name]();
@@ -1285,6 +1424,7 @@ async function loadApis(p) {
     '<td>' +
     '<button class="btn bi btn-outline-success btn-sm me-1" onclick="run1('+a.id+')" title="執行"><i class="fas fa-play fa-xs"></i></button>' +
     '<button class="btn bi btn-outline-primary btn-sm me-1" onclick="editApi('+a.id+')" title="編輯"><i class="fas fa-edit fa-xs"></i></button>' +
+    '<button class="btn bi btn-outline-secondary btn-sm me-1" onclick="copyApi('+a.id+')" title="複製測試用例"><i class="fas fa-copy fa-xs"></i></button>' +
     '<button class="btn bi btn-outline-danger btn-sm" onclick="delApi('+a.id+')" title="刪除"><i class="fas fa-trash fa-xs"></i></button>' +
     '</td></tr>'
   ).join('');
@@ -1308,6 +1448,64 @@ async function delApi(id) {
   if (!confirm('確認刪除？')) return;
   const r = await R('DELETE','/api/apis/'+id+'/');
   r.code === 0 ? (toast('刪除成功'), loadApis()) : toast(r.message,'danger');
+}
+
+async function copyApi(id) {
+  // 1. 讀取原始接口完整資料
+  const r = await R('GET', '/api/apis/'+id+'/');
+  if (r.code !== 0) { toast(r.message, 'danger'); return; }
+  const a = r.data;
+
+  // 2. 構造副本 payload（去除 id，名稱加上「[副本]」）
+  const payload = {
+    name:                 '[副本] ' + a.name,
+    url:                  a.url,
+    method:               a.method,
+    body_type:            a.body_type || 'json',
+    category_id:          a.category_id || null,
+    sort_order:           (a.sort_order || 0) + 1,
+    timeout:              a.timeout || 30,
+    description:          a.description || '',
+    headers:              a.headers || '{}',
+    params:               a.params || '{}',
+    body:                 a.body || '{}',
+    use_async:            a.use_async || false,
+    use_session:          a.use_session || false,
+    encrypted:            a.encrypted || false,
+    encryption_algorithm: a.encryption_algorithm || '',
+    encryption_key:       a.encryption_key || '',
+    ssl_verify:           a.ssl_verify || 'true',
+    ssl_cert:             a.ssl_cert || '',
+    client_cert_enabled:  a.client_cert_enabled || false,
+    client_cert:          a.client_cert || '',
+    client_key:           a.client_key || '',
+    repeat_enabled:       a.repeat_enabled || false,
+    repeat_count:         a.repeat_count || 1,
+    extract_vars:         a.extract_vars || '[]',
+    assertions:           a.assertions || '[]',
+    deepdiff_assertions:  a.deepdiff_assertions || '[]',
+    db_assertions:        a.db_assertions || '[]',
+    body_enc_rules:       a.body_enc_rules || '[]',
+    pre_redis_rules:      a.pre_redis_rules || '[]',
+    pre_sql:              a.pre_sql || '',
+    post_sql:             a.post_sql || '',
+    pre_sql_db_id:        a.pre_sql_db_id || null,
+    post_sql_db_id:       a.post_sql_db_id || null,
+  };
+
+  // 3. 建立副本
+  const cr = await R('POST', '/api/apis/', payload);
+  if (cr.code !== 0) { toast('複製失敗：' + cr.message, 'danger'); return; }
+
+  toast('已複製為「' + payload.name + '」', 'success');
+  loadApis();
+
+  // 4. 詢問是否立即開啟副本進行編輯
+  setTimeout(() => {
+    if (confirm('複製成功！是否立即開啟副本進行編輯？')) {
+      editApi(cr.data.id);
+    }
+  }, 300);
 }
 
 // ══════════ API MODAL ══════════
@@ -1386,7 +1584,7 @@ async function editApi(id) {
 
   // ③ 動態規則
   try { JSON.parse(a.extract_vars||'[]').forEach(x => addEx(x.name, x.path)); } catch(e){}
-  try { JSON.parse(a.assertions||'[]').forEach(x => addAs(x.type, x.expected, x.path)); } catch(e){}
+  try { JSON.parse(a.assertions||'[]').forEach(x => addAs(x.type, x.expected, x.path, x.extra||{})); } catch(e){}
   try { JSON.parse(a.deepdiff_assertions||'[]').forEach(x => addDD(x.label, x.expected, x.ignore_fields?.join(','), x.check_path)); } catch(e){}
   try { JSON.parse(a.db_assertions||'[]').forEach(x => addDa(x)); } catch(e){}
   try { JSON.parse(a.body_enc_rules||'[]').forEach(x => addEncRule(x)); } catch(e){}
@@ -1819,23 +2017,169 @@ function addEx(n='', p='') {
     '<div class="col-md-7"><label class="form-label">JSON路徑</label><input type="text" class="form-control ex-p" value="'+eh(p)+'" placeholder="data.token"></div></div>';
   $('exRules').appendChild(d);
 }
-function addAs(type='status_code', exp='200', path='') {
+function addAs(type='status_code', exp='200', path='', extra={}) {
   const d = document.createElement('div'); d.className='ar';
-  const needPath = type==='json_path'||type==='not_empty'||type==='regex';
+  const isRx  = type==='regex';
+  const needPath = type==='json_path'||type==='not_empty'||isRx;
   const noExp = type==='not_empty';
-  d.innerHTML = '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.ar\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
-    '<div class="row g-1"><div class="col-md-4"><label class="form-label">類型</label><select class="form-select as-t" onchange="updAs(this)">' +
-    ['status_code','json_path','contains','not_empty','regex'].map(o => '<option value="'+o+'"'+(o===type?' selected':'')+'>'+{status_code:'狀態碼',json_path:'JSON路徑',contains:'包含文本',not_empty:'不為空',regex:'正則匹配'}[o]+'</option>').join('') +
-    '</select></div>' +
-    '<div class="col-md-4 as-pw" style="'+(needPath?'':'display:none')+'"><label class="form-label">JSON路徑</label><input type="text" class="form-control as-p" value="'+eh(path)+'" placeholder="data.code"></div>' +
-    '<div class="col-md-4 as-ew" style="'+(noExp?'display:none':'')+'"><label class="form-label">期望值</label><input type="text" class="form-control as-e" value="'+eh(exp)+'" placeholder="200"></div></div>';
+
+  const typeOpts = ['status_code','json_path','contains','not_empty','regex'].map(o =>
+    `<option value="${o}"${o===type?' selected':''}>${
+      {status_code:'狀態碼',json_path:'JSON路徑',contains:'包含文字',not_empty:'不為空',regex:'正則表達式 RegEx'}[o]
+    }</option>`).join('');
+
+  const tgt = extra.target||'body';
+  const tgtOpts = [
+    ['body','整個響應體'],['json_path','JSON路徑取值'],['header','響應標頭'],['status','狀態碼']
+  ].map(([v,l])=>`<option value="${v}"${v===tgt?' selected':''}>${l}</option>`).join('');
+
+  const mode = extra.mode||'search';
+  const modeOpts = [
+    ['search','含有即通過'],['fullmatch','整體匹配'],
+    ['findall','findall 數量 >='],['not_match','不應匹配']
+  ].map(([v,l])=>`<option value="${v}"${v===mode?' selected':''}>${l}</option>`).join('');
+
+  const flags = extra.flags||'';
+  const cap   = extra.cap_group||'';
+
+  d.innerHTML =
+    '<div class="d-flex align-items-start gap-1">'+
+    '<button class="btn bi btn-outline-danger btn-sm rmb mt-1" onclick="this.closest(\'.ar\').remove()"><i class="fas fa-times fa-xs"></i></button>'+
+    '<div class="flex-fill"><div class="row g-1 mb-1">'+
+    // type
+    '<div class="col-md-3"><label class="form-label small mb-0">類型</label>'+
+    '<select class="form-select form-select-sm as-t" onchange="updAs(this)">'+typeOpts+'</select></div>'+
+    // path
+    '<div class="col-md-4 as-pw" style="'+(needPath?'':'display:none')+'">'+
+    '<label class="form-label small mb-0 as-plbl">'+(isRx?'目標 JSON路徑（可空=整體）':'JSON路徑')+'</label>'+
+    '<input type="text" class="form-control form-control-sm as-p" value="'+eh(path)+'" placeholder="data.msg"></div>'+
+    // expected / pattern
+    '<div class="col-md-5 as-ew" style="'+(noExp?'display:none':'')+'">'+
+    '<label class="form-label small mb-0">'+(isRx?'正則模式 Pattern':'期望值')+'</label>'+
+    '<div class="input-group input-group-sm">'+
+    '<input type="text" class="form-control as-e" value="'+eh(exp)+'" placeholder="'+(isRx?'^\\\\d+$':'200')+'">'+
+    '<button class="btn btn-outline-info as-rxbtn" onclick="rxLiveTest(this)" title="即時測試" style="'+(isRx?'':'display:none')+'"><i class="fas fa-flask fa-xs"></i></button>'+
+    '</div></div>'+
+    '</div>'+
+    // ── 正則進階選項 ──
+    '<div class="as-rxopts border rounded px-2 py-2 mb-1" style="background:#f8fafc;'+(isRx?'':'display:none')+'">'+
+    '<div class="row g-2 align-items-end">'+
+    '<div class="col-md-3"><label class="form-label small mb-0">比對目標</label>'+
+    '<select class="form-select form-select-sm as-tgt">'+tgtOpts+'</select></div>'+
+    '<div class="col-md-3"><label class="form-label small mb-0">比對模式</label>'+
+    '<select class="form-select form-select-sm as-mode">'+modeOpts+'</select></div>'+
+    '<div class="col-md-2"><label class="form-label small mb-0">擷取群組</label>'+
+    '<input type="text" class="form-control form-control-sm as-cap" value="'+eh(cap)+'" placeholder="1 或 name"></div>'+
+    '<div class="col-md-4"><label class="form-label small mb-0">旗標</label>'+
+    '<div class="d-flex gap-3 pt-1">'+
+    '<label class="small"><input type="checkbox" class="as-fi form-check-input"'+(flags.includes('i')?' checked':'')+'>  i</label>'+
+    '<label class="small"><input type="checkbox" class="as-fm form-check-input"'+(flags.includes('m')?' checked':'')+'>  m</label>'+
+    '<label class="small"><input type="checkbox" class="as-fs form-check-input"'+(flags.includes('s')?' checked':'')+'>  s</label>'+
+    '<span class="text-muted" style="font-size:.65rem">忽略大小寫 / 多行 / 點匹配\\n</span>'+
+    '</div></div>'+
+    '</div>'+
+    '<div class="as-rxresult mt-1" style="display:none;font-size:.75rem"></div>'+
+    '</div>'+
+    '</div></div>';
   $('asRules').appendChild(d);
 }
 function updAs(sel) {
-  const r=sel.closest('.ar'), t=sel.value;
-  r.querySelector('.as-pw').style.display = (t==='json_path'||t==='not_empty'||t==='regex') ? '' : 'none';
+  const r=sel.closest('.ar'), t=sel.value, isRx=t==='regex';
+  const needPath = t==='json_path'||t==='not_empty'||isRx;
+  r.querySelector('.as-pw').style.display = needPath ? '' : 'none';
   r.querySelector('.as-ew').style.display = t==='not_empty' ? 'none' : '';
+  r.querySelector('.as-plbl').textContent = isRx ? '目標 JSON路徑（可空=整體）' : 'JSON路徑';
+  r.querySelector('.as-e').placeholder    = isRx ? '^\\d+$' : '200';
+  r.querySelector('.as-rxopts').style.display = isRx ? '' : 'none';
+  r.querySelector('.as-rxbtn').style.display  = isRx ? '' : 'none';
+  r.querySelector('label[class="form-label small mb-0"]:last-of-type').textContent = isRx ? '正則模式 Pattern' : '期望值';
+
 }
+
+// ══ 正則即時測試 ══════════════════════════════════════════
+function rxLiveTest(btn) {
+  const row    = btn.closest('.ar');
+  const pat    = row.querySelector('.as-e').value.trim();
+  const tgt    = row.querySelector('.as-tgt')?.value || 'body';
+  const mode   = row.querySelector('.as-mode')?.value || 'search';
+  const cap    = row.querySelector('.as-cap')?.value.trim() || '';
+  const fi     = row.querySelector('.as-fi')?.checked;
+  const fm     = row.querySelector('.as-fm')?.checked;
+  const fs     = row.querySelector('.as-fs')?.checked;
+  const resBox = row.querySelector('.as-rxresult');
+
+  if (!pat) { resBox.style.display='none'; return; }
+
+  // 取最近一次執行結果的響應體做測試
+  const lastBody = window._lastRunBody || '';
+  if (!lastBody) {
+    resBox.style.display = '';
+    resBox.innerHTML = '<span class="text-warning">⚠ 請先執行一次接口，才能即時測試正則</span>';
+    return;
+  }
+
+  try {
+    let flags = (fi?'i':'')+(fm?'m':'')+(fs?'s':'')+'g';
+    const rxObj = new RegExp(pat, flags);
+    let subject = lastBody;
+
+    // 取 JSON 路徑值
+    const pathInput = row.querySelector('.as-p').value.trim();
+    if (tgt === 'json_path' && pathInput) {
+      try {
+        const parsed = JSON.parse(lastBody);
+        subject = String(rxExtract(parsed, pathInput) ?? '');
+      } catch(e) { subject = lastBody; }
+    } else if (tgt === 'header') {
+      subject = window._lastRunHeaders || '';
+    } else if (tgt === 'status') {
+      subject = String(window._lastRunStatus || '');
+    }
+
+    let passed = false, detail = '';
+    if (mode === 'search') {
+      const m = subject.match(new RegExp(pat, (fi?'i':'')+(fm?'m':'')+(fs?'s':'')));
+      passed = !!m;
+      if (m) {
+        detail = '首次匹配：<code>'+eh(m[0].substring(0,120))+'</code>';
+        if (cap) {
+          const gv = isNaN(cap) ? m.groups?.[cap] : m[parseInt(cap)];
+          detail += '　擷取群組 ['+cap+']：<code>'+(gv!==undefined?eh(String(gv)):'未找到')+'</code>';
+        }
+      }
+    } else if (mode === 'fullmatch') {
+      const m = subject.match(new RegExp('^(?:'+pat+')$', (fi?'i':'')+(fm?'m':'')+(fs?'s':'')));
+      passed = !!m;
+      detail = passed ? '整體匹配通過' : '整體匹配失敗';
+    } else if (mode === 'findall') {
+      const all = [...subject.matchAll(new RegExp(pat, (fi?'i':'')+(fm?'m':'')+(fs?'s':'')+'g'))];
+      passed = all.length > 0;
+      detail = `找到 <strong>${all.length}</strong> 個匹配`;
+      if (all.length) detail += '：'+all.slice(0,3).map(m=>'<code>'+eh(m[0].substring(0,40))+'</code>').join('、')+(all.length>3?'...':'');
+    } else if (mode === 'not_match') {
+      const m = subject.match(new RegExp(pat, (fi?'i':'')+(fm?'m':'')+(fs?'s':'')));
+      passed = !m;
+      detail = passed ? '確認不匹配（通過）' : '意外匹配到：<code>'+eh((m?.[0]||'').substring(0,80))+'</code>';
+    }
+
+    resBox.style.display = '';
+    resBox.innerHTML = '<span class="badge bg-'+(passed?'success':'danger')+' me-1">'+(passed?'✓ 通過':'✗ 不通過')+'</span>'+detail;
+  } catch(e) {
+    resBox.style.display = '';
+    resBox.innerHTML = '<span class="text-danger">正則語法錯誤：'+eh(e.message)+'</span>';
+  }
+}
+
+function rxExtract(obj, path) {
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let cur = obj;
+  for (const p of parts) {
+    if (cur == null) return null;
+    cur = cur[p];
+  }
+  return cur;
+}
+
 function addDD(label='響應體對比', exp='{}', ignores='', cp='') {
   const d = document.createElement('div'); d.className='ddr';
   d.innerHTML = '<button class="btn bi btn-outline-danger btn-sm rmb" onclick="this.closest(\'.ddr\').remove()"><i class="fas fa-times fa-xs"></i></button>' +
@@ -1906,7 +2250,20 @@ function tryJSON(val, fieldName) {
 
 function colApiData() {
   const exRules = [...$('exRules').querySelectorAll('.er')].map(r=>({name:r.querySelector('.ex-n').value.trim(),path:r.querySelector('.ex-p').value.trim()})).filter(r=>r.name&&r.path);
-  const asRules = [...$('asRules').querySelectorAll('.ar')].map(r=>({type:r.querySelector('.as-t').value,expected:r.querySelector('.as-e')?.value||'',path:r.querySelector('.as-p')?.value||''}));
+  const asRules = [...$('asRules').querySelectorAll('.ar')].map(r=>{
+    const type = r.querySelector('.as-t').value;
+    const base = {type, expected: r.querySelector('.as-e')?.value||'', path: r.querySelector('.as-p')?.value||''};
+    if (type === 'regex') {
+      const flags = (r.querySelector('.as-fi')?.checked?'i':'')+(r.querySelector('.as-fm')?.checked?'m':'')+(r.querySelector('.as-fs')?.checked?'s':'');
+      base.extra = {
+        target:    r.querySelector('.as-tgt')?.value||'body',
+        mode:      r.querySelector('.as-mode')?.value||'search',
+        cap_group: r.querySelector('.as-cap')?.value||'',
+        flags:     flags,
+      };
+    }
+    return base;
+  });
   const ddRules = [...$('ddRules').querySelectorAll('.ddr')].map(r=>({
     label:r.querySelector('.dd-label').value.trim(),
     expected:r.querySelector('.dd-exp').value.trim(),
@@ -2074,6 +2431,10 @@ function showRun(data) {
       Object.entries(data.extracted_vars).map(([k,v])=>'<code>'+k+'</code>=<span class="text-success">'+eh(String(v))+'</span> ').join('') + '</div>';
   }
   h += '<div><strong>響應體：</strong><div class="rb mt-1">'+hl(data.response_body)+'</div></div>';
+  // 保存響應體供正則即時測試使用
+  window._lastRunBody    = data.response_body || '';
+  window._lastRunStatus  = data.response_status || '';
+  window._lastRunHeaders = JSON.stringify(data.response_headers || {});
   $('runBody').innerHTML = h;
   bootstrap.Modal.getOrCreateInstance($('runModal')).show();
 }
@@ -2899,7 +3260,15 @@ async function showRpt(id) {
       '<div class="row g-2">' +
       '<div class="col-md-6">' +
       (res.error_message?'<div class="alert alert-danger py-1 mb-2">'+eh(res.error_message)+'</div>':'') +
-      (res.assertion_results?.length?'<div class="mb-2"><strong>HTTP斷言：</strong>'+res.assertion_results.map(a=>'<span class="badge bg-'+(a.passed?'success':'danger')+' d-inline-block me-1 mb-1">'+eh(a.passed?'✓':'✗')+' '+eh(a.message||'')+'</span>').join('')+'</div>':'') +
+      (res.assertion_results?.length?'<div class="mb-2"><strong>HTTP斷言：</strong>'+res.assertion_results.map(a=>{
+          const isRx = a.rule?.type==='regex';
+          let badge = '<span class="badge bg-'+(a.passed?'success':'danger')+' d-inline-block me-1 mb-1 text-start" style="white-space:normal;max-width:100%">'+
+            eh(a.passed?'✓ ':'✗ ')+eh(a.message||'')+'</span>';
+          if (isRx && a.captured!=null) {
+            badge += '<span class="badge bg-info d-inline-block me-1 mb-1">擷取群組→ '+eh(String(a.captured))+'</span>';
+          }
+          return badge;
+        }).join('')+'</div>':'') +
       (hasDD?'<div class="mb-2"><strong>DeepDiff <span class="dt">DD</span>：</strong>'+res.deepdiff_results.map(a=>'<div class="badge bg-'+(a.passed?'success':'danger')+' d-block text-start mb-1">'+eh(a.message||'')+(a.diff?'<br><small>'+eh(a.diff.substring(0,100))+'</small>':'')+'</div>').join('')+'</div>':'') +
       (res.db_assertion_results?.length?'<div class="mb-2"><strong>DB斷言 <span class="dt">DB</span>：</strong>' +
         res.db_assertion_results.map(a => {
@@ -2961,6 +3330,205 @@ async function showRpt(id) {
       '</div></div></div></div>';
   });
   $('rptBody').innerHTML = h + '</div>';
+}
+
+// ══════════ REGEX TOOL ══════════
+
+const RX_PRESETS = [
+  { label:'手機號（中國）',  pattern:'1[3-9]\\d{9}',           flags:'g',  desc:'匹配中國大陸手機號' },
+  { label:'Email',           pattern:'[\\w.+-]+@[\\w-]+\\.[\\w.-]+', flags:'gi', desc:'匹配電子郵件地址' },
+  { label:'URL',             pattern:'https?:\\/\\/[\\w\\-._~:/?#\\[\\]@!$&\'()*+,;=%]+', flags:'gi', desc:'匹配 HTTP/HTTPS URL' },
+  { label:'IPv4',            pattern:'\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b', flags:'g', desc:'匹配 IPv4 地址' },
+  { label:'日期 YYYY-MM-DD', pattern:'\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])', flags:'g', desc:'匹配日期格式' },
+  { label:'時間 HH:MM:SS',   pattern:'(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d', flags:'g', desc:'匹配 24小時制時間' },
+  { label:'身份證（中國）',  pattern:'[1-9]\\d{5}(?:19|20)\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]', flags:'g', desc:'匹配18位身份證號' },
+  { label:'中文字符',        pattern:'[\\u4e00-\\u9fa5]+', flags:'g', desc:'匹配連續中文字符' },
+  { label:'整數',            pattern:'-?\\d+', flags:'g', desc:'匹配整數（含負數）' },
+  { label:'浮點數',          pattern:'-?\\d+\\.\\d+', flags:'g', desc:'匹配浮點數' },
+  { label:'16進位顏色',      pattern:'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\\b', flags:'g', desc:'匹配CSS顏色碼 #fff 或 #ffffff' },
+  { label:'JSON Key',        pattern:'"([^"]+)"\\s*:', flags:'g', desc:'提取 JSON 鍵名' },
+  { label:'HTML 標籤',       pattern:'<([a-zA-Z][a-zA-Z0-9]*)(?:\\s[^>]*)?>',flags:'g', desc:'匹配 HTML 開始標籤' },
+  { label:'SQL SELECT',      pattern:'\\bSELECT\\b[\\s\\S]+?\\bFROM\\b', flags:'gi', desc:'匹配 SQL SELECT ... FROM 片段' },
+  { label:'JWT Token',       pattern:'[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+', flags:'g', desc:'匹配 JWT Token 格式' },
+  { label:'郵政編碼（中國）',pattern:'\\b[1-9]\\d{5}\\b', flags:'g', desc:'匹配中國6位郵政編碼' },
+];
+
+// 當前激活的 flags
+let _rxFlags = new Set(['g']);
+
+function rxInit() {
+  // 渲染常用正則庫按鈕
+  const container = $('rxPresets');
+  if (!container || container.children.length > 0) return;
+  RX_PRESETS.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-outline-secondary rx-preset';
+    btn.textContent = p.label;
+    btn.title = p.desc + '\n正則：' + p.pattern + '\nFlags：' + p.flags;
+    btn.onclick = () => {
+      $('rxPattern').value = p.pattern;
+      _rxFlags = new Set(p.flags.split(''));
+      _rxSyncFlagBtns();
+      rxRun();
+      toast(p.label + ' 已載入', 'success');
+    };
+    container.appendChild(btn);
+  });
+
+  // flag 按鈕事件
+  document.querySelectorAll('.rx-flag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.flag;
+      if (_rxFlags.has(f)) { _rxFlags.delete(f); btn.classList.remove('active'); }
+      else                  { _rxFlags.add(f);    btn.classList.add('active'); }
+      $('rxFlagStr').textContent = [..._rxFlags].join('');
+      rxRun();
+    });
+    if (_rxFlags.has(btn.dataset.flag)) btn.classList.add('active');
+  });
+}
+
+function _rxSyncFlagBtns() {
+  document.querySelectorAll('.rx-flag').forEach(btn => {
+    btn.classList.toggle('active', _rxFlags.has(btn.dataset.flag));
+  });
+  $('rxFlagStr').textContent = [..._rxFlags].join('');
+}
+
+function rxRun() {
+  const pattern = $('rxPattern').value;
+  const input   = $('rxInput').value;
+  const replace = $('rxReplace').value;
+  const flags   = [..._rxFlags].join('');
+  const errEl   = $('rxPatternErr');
+
+  // 清空錯誤
+  errEl.textContent = '';
+
+  if (!pattern) {
+    $('rxHighlight').innerHTML = '<span class="text-muted">輸入正則與文本後自動高亮...</span>';
+    $('rxMatchBadge').className = 'badge bg-secondary';
+    $('rxMatchBadge').textContent = '等待輸入';
+    $('rxStats').style.display = 'none';
+    $('rxDetailCard').style.display = 'none';
+    $('rxGroupCard').style.display = 'none';
+    $('rxReplaceOut').innerHTML = '<span class="text-muted">替換結果將顯示在此...</span>';
+    return;
+  }
+
+  // 編譯正則
+  let rx;
+  try {
+    rx = new RegExp(pattern, flags);
+  } catch(e) {
+    errEl.textContent = '⚠ 正則語法錯誤：' + e.message;
+    $('rxMatchBadge').className = 'badge bg-danger';
+    $('rxMatchBadge').textContent = '語法錯誤';
+    $('rxHighlight').innerHTML = '<span class="text-danger">正則表達式有誤，請檢查語法</span>';
+    return;
+  }
+
+  const t0 = performance.now();
+
+  // 收集所有匹配
+  const matches = [];
+  if (flags.includes('g')) {
+    let m;
+    rx.lastIndex = 0;
+    while ((m = rx.exec(input)) !== null) {
+      matches.push({ index: m.index, text: m[0], groups: [...m].slice(1), full: m });
+      if (m[0].length === 0) rx.lastIndex++; // 防止死循環（零長度匹配）
+      if (matches.length > 500) { matches.push({ _overflow: true }); break; }
+    }
+  } else {
+    const m = rx.exec(input);
+    if (m) matches.push({ index: m.index, text: m[0], groups: [...m].slice(1), full: m });
+  }
+
+  const elapsed = (performance.now() - t0).toFixed(2);
+  const realMatches = matches.filter(m => !m._overflow);
+  const overflowed  = matches.some(m => m._overflow);
+
+  // ── 更新統計 ─────────────────────────────
+  $('rxStats').style.display = '';
+  $('rxMatchCount').textContent = realMatches.length + (overflowed ? '+' : '');
+  $('rxGroupCount').textContent = rx.source.match(/\((?!\?:)/g)?.length || 0;
+  $('rxInputLen').textContent   = input.length;
+  $('rxTestTime').textContent   = elapsed + 'ms';
+
+  const hasMch = realMatches.length > 0;
+  $('rxMatchBadge').className = 'badge bg-' + (hasMch ? 'success' : 'danger');
+  $('rxMatchBadge').textContent = hasMch
+    ? '✓ ' + realMatches.length + ' 個匹配' + (overflowed ? '（超過500條）' : '')
+    : '✗ 無匹配';
+
+  // ── 高亮預覽 ─────────────────────────────
+  if (!input) {
+    $('rxHighlight').innerHTML = '<span class="text-muted">請輸入測試文本...</span>';
+  } else if (!hasMch) {
+    $('rxHighlight').textContent = input;
+  } else {
+    let html = '', last = 0;
+    realMatches.forEach((m, i) => {
+      html += eh(input.slice(last, m.index));
+      html += `<mark class="rx-highlight-match rx-m${i % 5}" title="匹配 #${i+1}：${eh(m.text)}">${eh(m.text)}</mark>`;
+      last  = m.index + m.text.length;
+    });
+    html += eh(input.slice(last));
+    if (overflowed) html += '<span class="text-warning"> ...（超過500個匹配，僅顯示前500個）</span>';
+    $('rxHighlight').innerHTML = html;
+  }
+
+  // ── 匹配詳情表格 ──────────────────────────
+  if (hasMch) {
+    $('rxDetailCard').style.display = '';
+    $('rxMatchTable').innerHTML = realMatches.map((m, i) =>
+      `<tr>
+        <td class="text-muted">${i+1}</td>
+        <td><code class="rx-highlight-match rx-m${i%5} d-inline-block" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${eh(m.text)}">${eh(m.text)}</code></td>
+        <td>${m.index}</td>
+        <td>${m.index + m.text.length}</td>
+        <td>${m.groups.length ? m.groups.map((g,gi)=>`<span class="badge bg-secondary me-1">$${gi+1}: ${eh(g??'undefined')}</span>`).join('') : '<span class="text-muted">無</span>'}</td>
+      </tr>`
+    ).join('');
+  } else {
+    $('rxDetailCard').style.display = 'none';
+  }
+
+  // ── 捕獲組表格 ───────────────────────────
+  const maxGroups = Math.max(...realMatches.map(m => m.groups.length), 0);
+  if (hasMch && maxGroups > 0) {
+    $('rxGroupCard').style.display = '';
+    $('rxGroupTable').innerHTML = realMatches.map((m, i) =>
+      `<tr>
+        <td class="text-muted">${i+1}</td>
+        ${Array.from({length: Math.min(maxGroups, 5)}, (_, gi) =>
+          `<td>${m.groups[gi] !== undefined ? `<code>${eh(m.groups[gi])}</code>` : '<span class="text-muted">-</span>'}</td>`
+        ).join('')}
+        ${maxGroups < 5 ? '<td colspan="'+(5-maxGroups)+'" class="text-muted">-</td>' : ''}
+      </tr>`
+    ).join('');
+  } else {
+    $('rxGroupCard').style.display = 'none';
+  }
+
+  // ── 替換預覽 ─────────────────────────────
+  if (replace !== '') {
+    try {
+      const rxForReplace = new RegExp(pattern, flags);
+      const replaced = input.replace(rxForReplace, replace);
+      $('rxReplaceOut').textContent = replaced || '（替換結果為空）';
+    } catch(e) {
+      $('rxReplaceOut').innerHTML = '<span class="text-danger">替換錯誤：' + eh(e.message) + '</span>';
+    }
+  } else {
+    $('rxReplaceOut').innerHTML = '<span class="text-muted">請在上方「替換為」填入替換字符串...</span>';
+  }
+}
+
+function rxClearInput() {
+  $('rxInput').value = '';
+  rxRun();
 }
 
 // ══════════ INIT ══════════
