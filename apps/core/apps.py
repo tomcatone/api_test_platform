@@ -24,21 +24,61 @@ def _auto_migrate_columns():
             ('core_apiconfig', 'ssl_cert',   "VARCHAR(500) NOT NULL DEFAULT ''",    None),
             # 前置 Redis（如較舊版本缺失）
             ('core_apiconfig', 'pre_redis_rules', "TEXT NOT NULL DEFAULT '[]'", None),
+            # 全局加密 JSON 包裝鍵名（預設 encrypted，可改為 data/param 等）
+            ('core_apiconfig', 'encryption_wrapper_key', "VARCHAR(100) NOT NULL DEFAULT 'encrypted'", None),
             # 幂等性測試（v4 新增）← 這兩個是當前 500 的根因
             ('core_apiconfig', 'repeat_enabled', 'BOOLEAN NOT NULL DEFAULT 0',  None),
             ('core_apiconfig', 'repeat_count',   'INTEGER NOT NULL DEFAULT 1',  None),
+            # SQL 提取變量（v5 新增）
+            ('core_apiconfig', 'pre_sql_extract_vars',  "TEXT NOT NULL DEFAULT '[]'", None),
+            ('core_apiconfig', 'post_sql_extract_vars', "TEXT NOT NULL DEFAULT '[]'", None),
+            # TestResult 新欄位（v3+ 新增，舊版資料庫補齊）
+            ('core_testresult', 'pre_sql_result',        "TEXT NOT NULL DEFAULT ''",   None),
+            ('core_testresult', 'post_sql_result',       "TEXT NOT NULL DEFAULT ''",   None),
+            ('core_testresult', 'db_assertion_results',  "TEXT NOT NULL DEFAULT '[]'", None),
+            ('core_testresult', 'deepdiff_results',      "TEXT NOT NULL DEFAULT '[]'", None),
+            ('core_testresult', 'use_async',             'BOOLEAN NOT NULL DEFAULT 0', None),
+            ('core_apiconfig', 'cookie', "TEXT NOT NULL DEFAULT ''", None),   # Cookie 請求頭
+            ('core_apiconfig', 'request_verify',  "TEXT NOT NULL DEFAULT ''", None),  # requests verify 參數
+            ('core_apiconfig', 'allow_redirects',          'BOOLEAN NOT NULL DEFAULT 1',   None),  # 允許自動重定向
+            # OAuth2 認證欄位
+            ('core_apiconfig', 'use_oauth2',               'BOOLEAN NOT NULL DEFAULT 0',   None),
+            ('core_apiconfig', 'oauth2_base_url',           "VARCHAR(1000) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_redirect_uri',       "VARCHAR(1000) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_username',           "VARCHAR(200) NOT NULL DEFAULT ''",  None),
+            ('core_apiconfig', 'oauth2_password',           "VARCHAR(200) NOT NULL DEFAULT ''",  None),
+            ('core_apiconfig', 'oauth2_client_id',         "VARCHAR(500) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_client_secret',     "VARCHAR(500) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_token_url',         "VARCHAR(1000) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_scope',             "VARCHAR(500) NOT NULL DEFAULT ''", None),
+            ('core_apiconfig', 'oauth2_extra_params',      "TEXT NOT NULL DEFAULT '{}'",   None),
+            ('core_apiconfig', 'oauth2_allow_redirects',   'BOOLEAN NOT NULL DEFAULT 1',   None),
+            ('core_apiconfig', 'oauth2_verify',             'BOOLEAN NOT NULL DEFAULT 0',   None),
+            ('core_testresult', 'response_url', "TEXT NOT NULL DEFAULT ''", None),    # 最終響應URL
+            # repeat_index: 第幾次重複執行（0=第1次），用於報告明細排序
+            ('core_testresult', 'repeat_index', 'INTEGER NOT NULL DEFAULT 0', None),
         ]
 
         with connection.cursor() as cursor:
-            # 取得當前所有欄位
-            cursor.execute("PRAGMA table_info(core_apiconfig)")
-            existing = {row[1] for row in cursor.fetchall()}
-
+            # 按資料表分組，每張表只查一次 PRAGMA
+            from collections import defaultdict
+            by_table = defaultdict(list)
             for table, col, col_type, _ in COLUMNS_TO_ADD:
-                if col not in existing:
-                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN {col} {col_type}')
-                    logger.info(f'[AutoMigrate] 已新增欄位: {table}.{col}')
-                    existing.add(col)
+                by_table[table].append((col, col_type))
+
+            for table, cols in by_table.items():
+                try:
+                    cursor.execute(f"PRAGMA table_info({table})")
+                    existing = {row[1] for row in cursor.fetchall()}
+                except Exception:
+                    existing = set()
+                for col, col_type in cols:
+                    if col not in existing:
+                        try:
+                            cursor.execute(f'ALTER TABLE {table} ADD COLUMN {col} {col_type}')
+                            logger.info(f'[AutoMigrate] 已新增欄位: {table}.{col}')
+                        except Exception as col_err:
+                            logger.warning(f'[AutoMigrate] 新增欄位失敗 {table}.{col}: {col_err}')
 
         logger.info('[AutoMigrate] 欄位補齊完成')
     except Exception as ex:

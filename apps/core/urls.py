@@ -33,11 +33,13 @@ urlpatterns = [
     path('scheduler/tasks/<int:pk>/run/',    views.scheduled_task_run_now, name='task-run'),
     path('scheduler/tasks/<int:pk>/toggle/', views.scheduled_task_toggle,  name='task-toggle'),
     # Locust
-    path('locust/start/',                views.locust_start,   name='locust-start'),
-    path('locust/status/<str:task_id>/', views.locust_status,  name='locust-status'),
-    path('locust/stop/<str:task_id>/',   views.locust_stop,    name='locust-stop'),
-    path('locust/collect/<str:task_id>/',views.locust_collect, name='locust-collect'),
-    path('locust/preview/',              views.locust_preview, name='locust-preview'),
+    path('locust/start/',                        views.locust_start,         name='locust-start'),
+    path('locust/status/<str:task_id>/',         views.locust_status,        name='locust-status'),
+    path('locust/stop/<str:task_id>/',           views.locust_stop,          name='locust-stop'),
+    path('locust/collect/<str:task_id>/',        views.locust_collect,       name='locust-collect'),
+    path('locust/preview/',                      views.locust_preview,       name='locust-preview'),
+    path('locust/remote-config/<str:task_id>/',  views.locust_remote_config, name='locust-remote-config'),
+    path('locust/worker-script/<str:task_id>/',  views.locust_worker_script, name='locust-worker-script'),
     # 接口
     path('apis/',              views.api_list,       name='api-list'),
     path('apis/<int:pk>/',     views.api_detail,     name='api-detail'),
@@ -46,8 +48,9 @@ urlpatterns = [
     path('run/batch/',                       views.api_run_batch,   name='run-batch'),
     path('run/batch/status/<str:task_id>/', views.api_batch_status, name='run-batch-status'),
     # 報告
-    path('reports/',           views.report_list,    name='report-list'),
-    path('reports/<int:pk>/',  views.report_detail,  name='report-detail'),
+    path('reports/',              views.report_list,         name='report-list'),
+    path('reports/bulk-delete/',  views.report_bulk_delete,  name='report-bulk-delete'),
+    path('reports/<int:pk>/',     views.report_detail,       name='report-detail'),
     # SSL 證書
     path('ssl/cert/upload/',         views.ssl_cert_upload,    name='ssl-cert-upload'),
     path('ssl/cert/delete/',         views.ssl_cert_delete,    name='ssl-cert-delete'),

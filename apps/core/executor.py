@@ -98,7 +98,10 @@ def replace_vars_in_dict(data, variables: dict):
         elif isinstance(v, dict):
             result[k] = replace_vars_in_dict(v, variables)
         elif isinstance(v, list):
-            result[k] = [_replace_vars(i, variables) if isinstance(i, str) else i for i in v]
+            # 遞歸處理 list 中的每一個元素（支持 list of dict / list of list）
+            result[k] = [replace_vars_in_dict(i, variables) if isinstance(i, dict)
+                         else (_replace_vars(i, variables) if isinstance(i, str) else i)
+                         for i in v]
         else:
             result[k] = v
     return result
@@ -132,10 +135,12 @@ def encrypt_gcm(ssrc: str, raw: str) -> str:
     else:
         raw_bytes = raw_bytes[:32]
 
-    iv = bytearray(12)
+    # 使用隨機 IV（與用戶腳本 os.urandom(12) 一致，每次加密唯一）
+    import os as _os_gcm
+    iv = _os_gcm.urandom(12)
     cipher = _AES.new(raw_bytes, _AES.MODE_GCM, nonce=iv)
     ciphertext, tag = cipher.encrypt_and_digest(ssrc.encode('utf-8'))
-    encrypted = bytes(iv) + ciphertext + tag
+    encrypted = iv + ciphertext + tag  # [IV(12)] + [ciphertext] + [Tag(16)]
     return base64.b64encode(encrypted).decode('utf-8')
 
 
@@ -248,6 +253,73 @@ def apply_body_enc_rules(body: dict, rules: list, default_raw: str,
 # ── JSON 路徑提取 ────────────────────────────────────
 
 def extract_value(data, path: str):
+    try:
+        path = path.lstrip('$').lstrip('.')
+        parts = re.split(r'[.\[\]]', path)
+        cur = data
+        for p in parts:
+            if not p:
+                continue
+            cur = cur[p] if isinstance(cur, dict) else cur[int(p)]
+        return cur
+    except Exception:
+        return None
+
+
+def _extract_sql_vars(sql_result: dict, rules: list, variables: dict, save_global: bool = False) -> dict:
+    """
+    從 execute_sql_statements() 的結果中提取變量。
+    規則格式: [{"name": "user_id", "stmt": 0, "field": "id", "row": 0, "save_global": false}, ...]
+      - name       : 變量名，後續用 {{name}} 引用
+      - stmt       : 第幾條 SQL 語句的結果（0-based，默認0）
+      - field      : 取哪個欄位名（SELECT 結果的列名）；留空則取整行 dict
+      - row        : 取第幾行（0-based，默認0，-1 表示最後一行）
+      - save_global: 是否同時寫入 GlobalVariable（持久化）
+    返回 {name: value} 提取成功的映射。
+    """
+    extracted = {}
+    if not rules or not sql_result.get('success'):
+        return extracted
+
+    stmts = sql_result.get('statements', [])
+
+    for rule in rules:
+        vname = rule.get('name', '').strip()
+        if not vname:
+            continue
+        stmt_idx = int(rule.get('stmt', 0))
+        field    = rule.get('field', '').strip()
+        row_idx  = int(rule.get('row', 0))
+        do_save  = rule.get('save_global', False)
+
+        try:
+            stmt_res = stmts[stmt_idx]
+            rows = stmt_res.get('rows', [])
+            if not rows:
+                continue
+            row = rows[row_idx]            # 可能 IndexError
+            val = str(row[field]) if field else str(row)
+        except (IndexError, KeyError, TypeError):
+            continue
+
+        extracted[vname] = val
+        set_runtime_var(vname, val)
+        variables[vname] = val
+
+        if do_save:
+            try:
+                from apps.core.models import GlobalVariable
+                GlobalVariable.objects.update_or_create(
+                    name=vname,
+                    defaults={'value': val, 'var_type': 'string',
+                              'description': f'[SQL自動提取] {rule.get("field","")}'}
+                )
+            except Exception:
+                pass
+
+    return extracted
+
+
     try:
         path = path.lstrip('$').lstrip('.')
         parts = re.split(r'[.\[\]]', path)
@@ -449,6 +521,13 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
 
     if body_type == 'json':
         if not body_is_empty:
+            # body 為 JSON 字串時先解析，避免 requests 把整個字串再次序列化
+            # 例：body='{"data":"abc"}' → 解析成 {"data":"abc"} 再發送
+            if isinstance(body, str):
+                try:
+                    body = json.loads(body)
+                except (ValueError, TypeError):
+                    pass
             kwargs['json'] = body
 
     elif body_type == 'data':
@@ -492,12 +571,16 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
         files_list = []
         body_copy = dict(body) if isinstance(body, dict) else {}
         raw_files = body_copy.pop('__files__', [])
+        _open_handles = []
         for fi in raw_files:
             fpath = fi.get('path', '')
             if fpath and os.path.isfile(fpath):
+                fh = open(fpath, 'rb')
+                _open_handles.append(fh)
                 files_list.append((fi.get('field', 'file'),
-                                   (os.path.basename(fpath), open(fpath, 'rb'),
+                                   (os.path.basename(fpath), fh,
                                     fi.get('mime', 'application/octet-stream'))))
+        # Note: file handles will be closed by requests after sending
         if files_list:
             kwargs['files'] = files_list
         if body_copy:
@@ -513,22 +596,166 @@ def _build_request_kwargs(method, url, headers, params, body, body_type, timeout
 
 # ── 同步請求（requests / Session）───────────────────
 
+
+# ── OAuth2 Authorization Code Flow（requests-oauthlib）────────────────────────
+
+def _get_oauth2_session(base_url, client_id, client_secret, redirect_uri,
+                        scope, username, password,
+                        oauth2_verify=False, timeout=30):
+    """
+    OAuth2 Authorization Code Flow — 100% 對齊用戶驗證腳本。
+
+    get_authenticated_session 腳本原始邏輯：
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=scope)
+        oauth.verify = False
+        authorization_url, _ = oauth.authorization_url(auth_endpoint)
+        oauth.post(login_url, data=login_data)           ← 用同一個 oauth session
+        res = oauth.get(authorization_url)               ← 用同一個 oauth session
+        oauth.fetch_token(..., authorization_response=res.url, ...)
+        return oauth
+
+    注意：腳本用的是同一個 OAuth2Session 物件貫穿全程，
+    本函數完全複製這個模式，不做任何分離。
+    """
+    try:
+        from requests_oauthlib import OAuth2Session
+    except ImportError:
+        raise ImportError('OAuth2 認證需要安裝 requests-oauthlib：pip install requests-oauthlib')
+
+    import os as _os
+    import re as _re
+
+    # 必須在建立 OAuth2Session 之前設定，否則 oauthlib 拒絕非 HTTPS redirect_uri
+    _os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+    # 靜音 InsecureRequestWarning（自簽名憑證環境）
+    try:
+        import urllib3 as _urllib3
+        _urllib3.disable_warnings(_urllib3.exceptions.InsecureRequestWarning)
+    except Exception:
+        pass
+
+    # 解析 scope 字串 → list（支援多種格式：帶引號、方括號、逗號、空格分隔）
+    _scope_raw = (scope or '').strip()
+    if _scope_raw.startswith('[') and _scope_raw.endswith(']'):
+        _scope_raw = _scope_raw[1:-1]
+    scope_list = [
+        t.strip().strip('"').strip("'")
+        for t in _re.split(r'[,\s]+', _scope_raw)
+        if t.strip().strip('"').strip("'")
+    ] or None
+
+    # ════════════════════════════════════════════════════════════════
+    # 以下邏輯與用戶腳本 get_authenticated_session 逐行對應
+    # ════════════════════════════════════════════════════════════════
+
+    # 1. 創建 OAuth2Session 實例（對應腳本第 1 步）
+    oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=scope_list)
+    oauth.verify = oauth2_verify     # 對應腳本：oauth.verify = False
+
+    # 2. 獲取授權頁面 URL（純本地生成，不發 HTTP）
+    auth_endpoint = f"{base_url.rstrip('/')}/oauth2/authorize"
+    authorization_url, _ = oauth.authorization_url(auth_endpoint)
+
+    # 3. 模擬 Spring Security 登錄（對應腳本第 2 步）
+    login_url = f"{base_url.rstrip('/')}/login"
+    login_data = {"username": username, "password": password}
+    oauth.post(login_url, data=login_data)
+
+    # 4. 請求授權地址（對應腳本第 3 步）
+    #    帶有 Login 後的 Session Cookie → Spring 自動授權 → res.url 含 code+state
+    res = oauth.get(authorization_url)
+
+    # 5. 換取 Access Token（對應腳本第 4 步）
+    token_endpoint = f"{base_url.rstrip('/')}/oauth2/token"
+    oauth.fetch_token(
+        token_url=token_endpoint,
+        authorization_response=res.url,
+        client_secret=client_secret,
+    )
+
+    return oauth
+
+
+
+def _do_oauth2_request(method, url, headers, params, body, body_type, timeout,
+                       base_url, client_id, client_secret, redirect_uri,
+                       scope='', username='', password='',
+                       oauth2_verify=False, ssl_verify=True,
+                       client_cert=None, allow_redirects=True):
+    """
+    OAuth2 Authorization Code Flow 完成認證後發送 API 請求。
+
+    oauth2_verify : 控制認證流程的 SSL 驗證（oauth.verify = oauth2_verify）
+    ssl_verify    : 控制最終 API 請求的 SSL 驗證
+
+    使用方式等價於：
+        session = get_authenticated_session(**AUTH_CONFIG)
+        session.post(f"{base}/api/...", json={...})
+        session.get(f"{base}/api/...", params={...})
+    """
+    # ── oauth2_verify=False 時靜音 InsecureRequestWarning ─────────────────
+    if not oauth2_verify:
+        try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except Exception:
+            pass
+
+    # ── 取得已認證的 OAuth2Session（等價 get_authenticated_session()）──────
+    session = _get_oauth2_session(
+        base_url=base_url, client_id=client_id, client_secret=client_secret,
+        redirect_uri=redirect_uri, scope=scope,
+        username=username, password=password,
+        oauth2_verify=oauth2_verify, timeout=timeout
+    )
+
+    # ── 構建請求 kwargs（對齊 session.post/get/delete/put 原生調用方式）────
+    kw = _build_request_kwargs(method, url, headers, params, body, body_type, timeout)
+    req_url = kw.pop('url')
+    # 當 oauth2_verify=False 時（等價 oauth.verify=False），API 請求同樣跳過 SSL 驗證
+    # 這與用戶腳本行為完全一致：oauth.verify=False 對所有請求生效
+    effective_verify = ssl_verify if oauth2_verify else False
+    kw['verify']          = effective_verify
+    kw['allow_redirects'] = allow_redirects
+    if client_cert:
+        kw['cert'] = client_cert
+
+    # ── 使用已認證 session 發送請求（Bearer token 自動附加）────────────────
+    # 支援所有 HTTP 方法：GET / POST / PUT / DELETE / PATCH
+    # 等價：session.post(url, json=body) / session.get(url, params=p) / session.delete(url)
+    resp = session.request(method.upper(), req_url, **kw)
+    final_url = str(getattr(resp, 'url', req_url) or req_url)
+    # 返回實際發送的請求頭（含 Authorization: Bearer xxx）和請求體（供 debug 面板顯示）
+    _req = resp.request
+    _sent_headers = dict(_req.headers) if _req else {}
+    _sent_body    = (_req.body or '') if _req else ''
+    if isinstance(_sent_body, bytes):
+        try: _sent_body = _sent_body.decode('utf-8')
+        except: _sent_body = repr(_sent_body)
+    return resp.status_code, dict(resp.headers), resp.text, final_url, _sent_headers, _sent_body
+
 def _do_sync_request(method, url, headers, params, body, body_type, timeout,
-                     use_session=False, api_id=None, ssl_verify=True, client_cert=None):
+                     use_session=False, api_id=None, ssl_verify=True, client_cert=None,
+                     allow_redirects=True):
     kw = _build_request_kwargs(method, url, headers, params, body, body_type, timeout)
     req_url = kw.pop('url')
     kw['verify'] = ssl_verify           # True / False / '/path/to/ca.pem'
+    kw['allow_redirects'] = allow_redirects
     if client_cert:
         kw['cert'] = client_cert        # (cert_path, key_path) 或 combined_pem_path
     sess = _get_session(api_id) if (use_session and api_id) else requests
     resp = sess.request(method.upper(), req_url, **kw)
-    return resp.status_code, dict(resp.headers), resp.text
+    # response_url: 實際最終 URL（含重定向後地址）
+    final_url = getattr(resp, 'url', None)
+    final_url = str(final_url) if final_url else req_url
+    return resp.status_code, dict(resp.headers), resp.text, final_url
 
 
 # ── 異步請求（asyncio + httpx）──────────────────────
 
 async def _do_async_request(method, url, headers, params, body, body_type, timeout,
-                             ssl_verify=True, client_cert=None):
+                             ssl_verify=True, client_cert=None, allow_redirects=True):
     timeout_cfg = httpx.Timeout(connect=min(timeout, 10), read=timeout, write=timeout, pool=timeout)
     headers = dict(headers or {})
     params  = {k: v for k, v in (params or {}).items() if v not in ('', None)}
@@ -560,7 +787,7 @@ async def _do_async_request(method, url, headers, params, body, body_type, timeo
             _ctx_mtls.load_cert_chain(certfile=client_cert)
         _httpx_verify = _ctx_mtls
 
-    async with httpx.AsyncClient(timeout=timeout_cfg, verify=_httpx_verify) as client:
+    async with httpx.AsyncClient(timeout=timeout_cfg, verify=_httpx_verify, follow_redirects=allow_redirects) as client:
         # 過濾 _raw，並處理純字符串 params
         clean_params = {k: v for k, v in params.items() if k != '_raw' and v not in ('', None)}
         req_url = url
@@ -615,7 +842,8 @@ async def _do_async_request(method, url, headers, params, body, body_type, timeo
                 kw['json'] = body
 
         resp = await client.request(method.upper(), req_url, **kw)
-        return resp.status_code, dict(resp.headers), resp.text
+        final_url = str(resp.url) if hasattr(resp, 'url') and resp.url else req_url
+        return resp.status_code, dict(resp.headers), resp.text, final_url
 
 
 def _run_async_coro(coro):
@@ -675,6 +903,24 @@ def _gen_dynamic_vars() -> dict:
         'rand_int':      str(random.randint(100000, 999999)),
         'rand_str':      ''.join(random.choices(rand_chars, k=8)),
     }
+
+
+def _replace_db_rules(rules: list, vars_: dict) -> list:
+    """替換 DB 斷言規則中的 {{變量名}} 佔位符，返回副本。"""
+    import copy
+    replaced = []
+    for rule in rules:
+        r = copy.deepcopy(rule)
+        if r.get('sql'):
+            r['sql'] = _replace_vars(r['sql'], vars_)
+        if r.get('expected') is not None:
+            r['expected'] = _replace_vars(str(r['expected']), vars_)
+        if r.get('fields'):
+            for f in r['fields']:
+                if f.get('expected') is not None:
+                    f['expected'] = _replace_vars(str(f['expected']), vars_)
+        replaced.append(r)
+    return replaced
 
 
 def execute_api(api_config, extra_vars: dict = None) -> dict:
@@ -738,20 +984,56 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
     timeout   = max(int(getattr(api_config, 'timeout', 30) or 30), 1)
     use_async   = bool(getattr(api_config, 'use_async', False))
     use_session = bool(getattr(api_config, 'use_session', False))
-    body_type   = getattr(api_config, 'body_type', 'json') or 'json'
+
+    # ── Cookie 合併（支持 {{變量名}} 替換）──
+    _cookie_raw = _replace_vars(getattr(api_config, 'cookie', '') or '', variables).strip()
+    if _cookie_raw:
+        # 追加到已有 Cookie 頭（若已有則用 "; " 連接，保持順序）
+        _existing_cookie = headers.get('Cookie', '').strip()
+        headers['Cookie'] = (_existing_cookie + '; ' + _cookie_raw).strip('; ') if _existing_cookie else _cookie_raw
+    body_type         = getattr(api_config, 'body_type', 'json') or 'json'
+    allow_redirects   = bool(getattr(api_config, 'allow_redirects', True))
+    use_oauth2            = bool(getattr(api_config, 'use_oauth2', False))
+    request_headers       = {}  # will be populated with actual sent headers for OAuth2
+    request_body          = ''  # will be populated with actual sent body for OAuth2
+    oauth2_base_url       = (getattr(api_config, 'oauth2_base_url', '') or '').strip()
+    oauth2_client_id      = (getattr(api_config, 'oauth2_client_id', '') or '').strip()
+    oauth2_client_secret  = (getattr(api_config, 'oauth2_client_secret', '') or '').strip()
+    oauth2_redirect_uri   = (getattr(api_config, 'oauth2_redirect_uri', '') or '').strip()
+    oauth2_scope          = (getattr(api_config, 'oauth2_scope', '') or '').strip()
+    oauth2_username       = (getattr(api_config, 'oauth2_username', '') or '').strip()
+    oauth2_password       = (getattr(api_config, 'oauth2_password', '') or '').strip()
+    oauth2_allow_redirects = bool(getattr(api_config, 'oauth2_allow_redirects', True))
+    oauth2_verify          = bool(getattr(api_config, 'oauth2_verify', False))
 
     # ── SSL 驗證模式 ──
-    _ssl_mode = getattr(api_config, 'ssl_verify', 'true') or 'true'
-    _ssl_cert = (getattr(api_config, 'ssl_cert', '') or '').strip()
-    if _ssl_mode == 'false':
-        ssl_verify = False          # 跳過驗證（忽略自簽名）
-    elif _ssl_mode == 'custom' and _ssl_cert:
-        import os as _os
-        if not _os.path.isfile(_ssl_cert):
-            raise FileNotFoundError(f'SSL 自定義 CA 證書文件不存在：{_ssl_cert}')
-        ssl_verify = _ssl_cert      # 使用自定義 CA 證書路徑
+    # 優先使用 request_verify（直接對應 requests verify 參數）
+    _req_verify = (getattr(api_config, 'request_verify', '') or '').strip()
+    if _req_verify:
+        # 用戶直接指定 verify 值
+        if _req_verify.lower() in ('false', '0', 'no'):
+            ssl_verify = False
+        elif _req_verify.lower() in ('true', '1', 'yes', ''):
+            ssl_verify = True
+        else:
+            # 視為 CA 証書路徑
+            import os as _os
+            if not _os.path.isfile(_req_verify):
+                raise FileNotFoundError(f'request_verify 指定的 CA 路徑不存在：{_req_verify}')
+            ssl_verify = _req_verify
     else:
-        ssl_verify = True           # 默認驗證
+        # request_verify 為空時，回退到 ssl_verify 選單設定
+        _ssl_mode = getattr(api_config, 'ssl_verify', 'true') or 'true'
+        _ssl_cert = (getattr(api_config, 'ssl_cert', '') or '').strip()
+        if _ssl_mode == 'false':
+            ssl_verify = False          # 跳過驗證（忽略自簽名）
+        elif _ssl_mode == 'custom' and _ssl_cert:
+            import os as _os
+            if not _os.path.isfile(_ssl_cert):
+                raise FileNotFoundError(f'SSL 自定義 CA 證書文件不存在：{_ssl_cert}')
+            ssl_verify = _ssl_cert      # 使用自定義 CA 證書路徑
+        else:
+            ssl_verify = True           # 默認驗證
 
     # ── mTLS 客戶端證書 ──
     client_cert = None
@@ -781,6 +1063,9 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
     # ── 全局 Body 加密（整體加密模式，body_enc_rules 優先）──
     request_body_raw = body
     encrypted_body   = None
+    enc_skipped_reason = ''
+    if getattr(api_config, 'encrypted', False) and not enc_key:
+        enc_skipped_reason = '⚠️ 加密已勾選但密鑰為空，加密跳過 → body 以明文發送'
     if getattr(api_config, 'encrypted', False) and enc_key and not body_enc_rules:
         bs = json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else str(body or '')
         encrypted_body = encrypt_body(bs, enc_algo, enc_key)
@@ -791,35 +1076,52 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
             body = encrypted_body
             # body_type 保持不變，繼續以原模式（data=/text/raw）發送
         else:
-            # json / form 模式：才包裝成 JSON 對象
-            body      = {'encrypted': encrypted_body}
+            # json / form 模式：以用戶設定的鍵名包裝（預設 encrypted，可改為 data/param 等）
+            _wrap_key = (getattr(api_config, 'encryption_wrapper_key', '') or 'encrypted').strip() or 'encrypted'
+            body      = {_wrap_key: encrypted_body}
             body_type = 'json'
 
     # 前置 SQL
     pre_sql_result = ''
+    pre_sql_extracted = {}
     if getattr(api_config, 'pre_sql', '') and getattr(api_config, 'pre_sql_db_id', None):
         try:
             res = execute_sql_statements(api_config.pre_sql_db, replace_vars_in_sql(api_config.pre_sql, variables))
             pre_sql_result = json.dumps(res, ensure_ascii=False, default=str)
+            # 提取前置SQL變量，注入 variables 供後續 HTTP 請求使用
+            pre_sql_extracted = _extract_sql_vars(res, api_config.get_pre_sql_extract_vars(), variables)
         except Exception as e:
             pre_sql_result = json.dumps({'success': False, 'error': str(e)})
 
     # HTTP 請求
     start = time.time()
     error_message = ''
-    response_status, response_headers, response_body, response_data = 0, {}, '', None
+    response_status, response_headers, response_body, response_url, response_data = 0, {}, '', '', None
 
     try:
-        if use_async:
-            response_status, response_headers, response_body = _run_async_coro(
+        if use_oauth2 and oauth2_base_url and oauth2_client_id:
+            # OAuth2 Authorization Code Flow（模擬 Spring Security 登錄）
+            response_status, response_headers, response_body, response_url, req_headers_sent, req_body_sent = _do_oauth2_request(
+                api_config.method, url, headers, params, body, body_type, timeout,
+                base_url=oauth2_base_url, client_id=oauth2_client_id,
+                client_secret=oauth2_client_secret, redirect_uri=oauth2_redirect_uri,
+                scope=oauth2_scope, username=oauth2_username, password=oauth2_password,
+                oauth2_verify=oauth2_verify, ssl_verify=ssl_verify,
+                client_cert=client_cert, allow_redirects=oauth2_allow_redirects
+            )
+            request_headers = req_headers_sent
+            request_body    = req_body_sent
+        elif use_async:
+            response_status, response_headers, response_body, response_url = _run_async_coro(
                 _do_async_request(api_config.method, url, headers, params, body, body_type, timeout,
-                                  ssl_verify=ssl_verify, client_cert=client_cert)
+                                  ssl_verify=ssl_verify, client_cert=client_cert,
+                                  allow_redirects=allow_redirects)
             )
         else:
-            response_status, response_headers, response_body = _do_sync_request(
+            response_status, response_headers, response_body, response_url = _do_sync_request(
                 api_config.method, url, headers, params, body, body_type, timeout,
                 use_session=use_session, api_id=api_config.id, ssl_verify=ssl_verify,
-                client_cert=client_cert
+                client_cert=client_cert, allow_redirects=allow_redirects
             )
         try:
             response_data = json.loads(response_body)
@@ -836,62 +1138,145 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
 
     # 提取變量
     extracted = {}
-    if response_data is not None and not error_message:
+    extract_failures = []  # track failed extractions for UI feedback
+    if not error_message:
         for rule in api_config.get_extract_vars():
-            vn, vp = rule.get('name', '').strip(), rule.get('path', '').strip()
-            if vn and vp:
-                val = extract_value(response_data, vp)
-                if val is not None:
-                    extracted[vn] = val
-                    set_runtime_var(vn, val)
-                    variables[vn] = val
+            vn       = rule.get('name', '').strip()
+            ex_type  = rule.get('type', 'json')   # 'json' | 'regex'
+            do_save  = rule.get('save_global', False)
+            if not vn:
+                continue
 
-    # HTTP 斷言
+            val = None
+            fail_reason = None
+
+            if ex_type == 'url':
+                # URL提取：從響應最終URL (response_url) 用正則提取
+                pattern  = rule.get('pattern', '').strip()
+                group    = int(rule.get('group', 0))
+                flags_s  = rule.get('flags', '')
+                re_flags = 0
+                if 'i' in flags_s: re_flags |= re.IGNORECASE
+                if 'm' in flags_s: re_flags |= re.MULTILINE
+                if 's' in flags_s: re_flags |= re.DOTALL
+                _target = response_url or ''
+                if not pattern:
+                    # 無正則：直接取整個 URL
+                    val = _target or None
+                    if not val: fail_reason = '響應URL為空'
+                elif _target:
+                    try:
+                        m = re.search(pattern, _target, re_flags)
+                        if m: val = m.group(group)
+                        else: fail_reason = f'URL正則無匹配: {pattern}  URL={_target}'
+                    except re.error as re_err:
+                        fail_reason = f'正則語法錯誤: {re_err}'
+                else:
+                    fail_reason = '響應URL為空'
+
+            elif ex_type == 'regex':
+                # 正則提取：從響應體原始字符串匹配
+                pattern  = rule.get('pattern', '').strip()
+                group    = int(rule.get('group', 0))   # 0=整個匹配, 1..N=捕獲組
+                flags_s  = rule.get('flags', '')       # 'i','m','s' 等
+                re_flags = 0
+                if 'i' in flags_s: re_flags |= re.IGNORECASE
+                if 'm' in flags_s: re_flags |= re.MULTILINE
+                if 's' in flags_s: re_flags |= re.DOTALL
+                if pattern and response_body:
+                    try:
+                        m = re.search(pattern, response_body, re_flags)
+                        if m:
+                            val = m.group(group)
+                        else:
+                            fail_reason = f'正則無匹配: {pattern}'
+                    except re.error as re_err:
+                        fail_reason = f'正則語法錯誤: {re_err}'
+                else:
+                    fail_reason = '正則或響應體為空'
+            else:
+                # JSON路徑提取（原有邏輯）
+                vp = rule.get('path', '').strip()
+                if vp and response_data is not None:
+                    val = extract_value(response_data, vp)
+                    if val is None:
+                        fail_reason = f'路徑不存在: {vp}'
+                else:
+                    fail_reason = '路徑為空或響應非JSON'
+
+            if val is not None:
+                extracted[vn] = val
+                set_runtime_var(vn, val)
+                variables[vn] = val
+                if do_save:
+                    try:
+                        from apps.core.models import GlobalVariable
+                        src = rule.get('pattern', rule.get('path', ''))
+                        GlobalVariable.objects.update_or_create(
+                            name=vn,
+                            defaults={'value': str(val), 'var_type': 'string',
+                                      'description': f'[響應自動提取] {ex_type}:{src}'}
+                        )
+                    except Exception:
+                        pass
+            else:
+                extract_failures.append({
+                    'name': vn,
+                    'type': ex_type,
+                    'path': rule.get('path', ''),
+                    'pattern': rule.get('pattern', ''),
+                    'url': response_url if ex_type == 'url' else '',
+                    'reason': fail_reason or '無結果',
+                })
+
+    # HTTP 斷言（先替換 expected 中的 {{變量名}}）
     assertion_results, all_http_ok = [], True
     if api_config.get_assertions() and not error_message:
-        assertion_results = run_assertions(api_config.get_assertions(), response_status, response_data)
+        assertions_replaced = []
+        for rule in api_config.get_assertions():
+            r2 = dict(rule)
+            if r2.get('expected') is not None:
+                r2['expected'] = _replace_vars(str(r2['expected']), variables)
+            if r2.get('path'):
+                r2['path'] = _replace_vars(r2['path'], variables)
+            assertions_replaced.append(r2)
+        assertion_results = run_assertions(assertions_replaced, response_status, response_data)
         all_http_ok = all(r['passed'] for r in assertion_results)
 
-    # DeepDiff 斷言
+    # DeepDiff 斷言（先替換 expected 中的 {{變量名}}）
     deepdiff_results, all_dd_ok = [], True
     dd_rules = api_config.get_deepdiff_assertions() if hasattr(api_config, 'get_deepdiff_assertions') else []
     if dd_rules and not error_message:
-        deepdiff_results = run_deepdiff_assertions(dd_rules, response_data)
+        dd_rules_replaced = []
+        for rule in dd_rules:
+            r2 = dict(rule)
+            if r2.get('expected') is not None:
+                r2['expected'] = _replace_vars(str(r2['expected']), variables)
+            dd_rules_replaced.append(r2)
+        deepdiff_results = run_deepdiff_assertions(dd_rules_replaced, response_data)
         all_dd_ok = all(r['passed'] for r in deepdiff_results)
-
-    # 後置 SQL
-    post_sql_result = ''
-    if getattr(api_config, 'post_sql', '') and getattr(api_config, 'post_sql_db_id', None):
-        try:
-            res = execute_sql_statements(api_config.post_sql_db, replace_vars_in_sql(api_config.post_sql, variables))
-            post_sql_result = json.dumps(res, ensure_ascii=False, default=str)
-        except Exception as e:
-            post_sql_result = json.dumps({'success': False, 'error': str(e)})
 
     # DB 斷言
     db_assertion_results, all_db_ok = [], True
     db_rules = api_config.get_db_assertions() if hasattr(api_config, 'get_db_assertions') else []
     if db_rules and not error_message:
         # 替換規則中的 {{變量名}}：SQL、expected 值、fields 中的 expected 都支持
-        def _replace_db_rules(rules, vars_):
-            import copy
-            replaced = []
-            for rule in rules:
-                r = copy.deepcopy(rule)
-                if r.get('sql'):
-                    r['sql'] = _replace_vars(r['sql'], vars_)
-                if r.get('expected') is not None:
-                    r['expected'] = _replace_vars(str(r['expected']), vars_)
-                if r.get('fields'):
-                    for f in r['fields']:
-                        if f.get('expected') is not None:
-                            f['expected'] = _replace_vars(str(f['expected']), vars_)
-                replaced.append(r)
-            return replaced
         db_assertion_results = run_db_assertions(_replace_db_rules(db_rules, variables))
         all_db_ok = all(r['passed'] for r in db_assertion_results)
     else:
         db_assertion_results = []
+
+    # 後置 SQL（測試週期最後一步）
+    post_sql_result = ''
+    post_sql_extracted = {}
+    if getattr(api_config, 'post_sql', '') and getattr(api_config, 'post_sql_db_id', None) and not error_message:
+        try:
+            res = execute_sql_statements(api_config.post_sql_db, replace_vars_in_sql(api_config.post_sql, variables))
+            post_sql_result = json.dumps(res, ensure_ascii=False, default=str)
+            # 提取後置SQL變量（此時 variables 已含響應提取變量）
+            post_sql_extracted = _extract_sql_vars(res, api_config.get_post_sql_extract_vars(), variables)
+        except Exception as e:
+            post_sql_result = json.dumps({'success': False, 'error': str(e)})
 
     # 最終狀態
     if error_message:
@@ -903,19 +1288,29 @@ def execute_api(api_config, extra_vars: dict = None) -> dict:
 
     return {
         'api_name': api_config.name, 'url': url, 'method': api_config.method,
-        'use_async': use_async, 'use_session': use_session, 'body_type': body_type,
-        'request_headers': headers, 'request_params': params,
-        'request_body': request_body_raw, 'encrypted_body': encrypted_body,
+        'use_async': use_async, 'use_session': use_session, 'use_oauth2': use_oauth2, 'body_type': body_type,
+        'request_headers': request_headers if use_oauth2 else headers, 'request_params': params,
+        'request_body': request_body if use_oauth2 else request_body_raw, 'encrypted_body': encrypted_body,
         'enc_applied': enc_applied,
         'pre_redis_log': pre_redis_log,
         'response_status': response_status, 'response_headers': response_headers,
-        'response_body': response_body, 'response_data': response_data,
-        'response_time': elapsed_ms, 'status': status, 'error_message': error_message,
+        'response_body': response_body, 'response_url': response_url, 'response_data': response_data,
+        'response_time': elapsed_ms, 'status': status,
+        'error_message': ((enc_skipped_reason + '\n') if enc_skipped_reason else '') + (error_message or ''),
         'extracted_vars': extracted,
+        'extract_failures': extract_failures,
         'assertion_results': assertion_results,
         'deepdiff_results': deepdiff_results,
         'db_assertion_results': db_assertion_results,
         'pre_sql_result': pre_sql_result, 'post_sql_result': post_sql_result,
+        # post_sql_skipped: 只在「有配置後置SQL」但「因HTTP錯誤被跳過」時才為True
+        'post_sql_skipped': bool(
+            getattr(api_config, 'post_sql', '').strip()
+            and getattr(api_config, 'post_sql_db_id', None)
+            and error_message
+            and not post_sql_result
+        ),
+        'pre_sql_extracted': pre_sql_extracted, 'post_sql_extracted': post_sql_extracted,
     }
 
 
@@ -926,7 +1321,7 @@ _batch_tasks: dict = {}   # task_id → {status, report_id, progress, total, err
 _batch_tasks_lock = threading.Lock()
 
 
-def _save_result(report, api, rd):
+def _save_result(report, api, rd, repeat_index=0):
     """保存單次執行結果到 TestResult"""
     from apps.core.models import TestResult
     TestResult.objects.create(
@@ -937,6 +1332,7 @@ def _save_result(report, api, rd):
         request_params=json.dumps(rd['request_params'], ensure_ascii=False),
         request_body=json.dumps(rd['request_body'], ensure_ascii=False, default=str),
         response_status=rd['response_status'],
+        response_url=rd.get('response_url', ''),
         response_headers=json.dumps(rd['response_headers'], ensure_ascii=False),
         response_body=rd['response_body'][:10000],
         response_time=rd['response_time'], status=rd['status'],
@@ -946,6 +1342,7 @@ def _save_result(report, api, rd):
         db_assertion_results=json.dumps(rd['db_assertion_results'], ensure_ascii=False, default=str),
         deepdiff_results=json.dumps(rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
         pre_sql_result=rd['pre_sql_result'], post_sql_result=rd['post_sql_result'],
+        repeat_index=repeat_index,
     )
 
 
@@ -964,7 +1361,9 @@ def execute_batch(api_ids: list, report_name: str = None,
 
     # 計算總執行次數（含每個接口的 repeat_count）
     def _api_total_runs(a):
-        return max(1, min(int(getattr(a, 'repeat_count', 1) or 1), 100))                if getattr(a, 'repeat_enabled', False) else 1
+        if getattr(a, 'repeat_enabled', False):
+            return max(1, min(int(getattr(a, 'repeat_count', 1) or 1), 100))
+        return 1
 
     total_runs = sum(_api_total_runs(a) for a in apis)
     report_name = report_name or f'批量測試_{time.strftime("%Y%m%d_%H%M%S")}'
@@ -987,11 +1386,21 @@ def execute_batch(api_ids: list, report_name: str = None,
 
     for api in apis:
         rc = _api_total_runs(api)
+        # 幂等性測試：快照本次 API 開始前的 runtime 變量
+        # 每次 repeat run 從同一基線出發，避免 run N 提取的值污染 run N+1 的初始狀態
+        # （跨 API 的變量傳遞仍通過 _runtime_vars 正常流動）
+        pre_repeat_snapshot = get_runtime_vars()
         for run_i in range(rc):
             if aborted:
                 break
+            # 若為多次重複，每次從相同的快照狀態啟動（保證幂等性測試的獨立性）
+            if rc > 1 and run_i > 0:
+                from apps.core.executor import _runtime_vars, _runtime_lock
+                with _runtime_lock:
+                    _runtime_vars.clear()
+                    _runtime_vars.update(pre_repeat_snapshot)
             rd = execute_api(api)
-            _save_result(report, api, rd)
+            _save_result(report, api, rd, repeat_index=run_i)
             if rd['status'] == 'pass':   passed += 1
             elif rd['status'] == 'fail': failed += 1
             else:                         error  += 1
@@ -1004,7 +1413,11 @@ def execute_batch(api_ids: list, report_name: str = None,
                     f'已啟用失敗停止，中斷執行'
                 )
                 aborted = True
-                break
+        # 多次重複後：用最後一次 run 的提取結果更新 runtime（讓後續 API 可用）
+        # 注意：rd 在 inner-loop 至少執行一次後已賦值（aborted 由 execute_api 後才設置）
+        if rc > 1:
+            for k, v in rd.get('extracted_vars', {}).items():
+                set_runtime_var(k, v)   # 所有變量均傳播，無 break
         if aborted:
             break
 

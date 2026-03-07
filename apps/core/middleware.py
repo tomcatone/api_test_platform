@@ -11,11 +11,18 @@ AUTH_WHITELIST = {
     '/api/auth/login/',
 }
 
+# 不需要登錄的路徑前綴（前綴匹配）
+# 遠端 Worker 機器無法登錄，需要直接訪問這兩個端點下載配置和腳本
+AUTH_WHITELIST_PREFIX = (
+    '/api/locust/remote-config/',   # 遠端 Worker 下載壓測配置 JSON
+    '/api/locust/worker-script/',   # 遠端 Worker 下載引導腳本
+)
+
 
 class ApiAuthMiddleware:
     """
     攔截所有 /api/ 請求，未登錄返回 401。
-    /api/auth/login/ 在白名單內，免檢。
+    白名單路徑和白名單前綴免檢。
     """
 
     def __init__(self, get_response):
@@ -26,12 +33,17 @@ class ApiAuthMiddleware:
 
         # 只保護 /api/ 路由
         if path.startswith('/api/'):
-            # 白名單直接放行
-            if path not in AUTH_WHITELIST:
-                if not request.user.is_authenticated:
-                    return JsonResponse(
-                        {'code': 401, 'message': '請先登錄', 'data': None, 'timestamp': None},
-                        status=401
-                    )
+            # 精確白名單
+            if path in AUTH_WHITELIST:
+                return self.get_response(request)
+            # 前綴白名單（供遠端 Worker 無需登錄訪問）
+            if path.startswith(AUTH_WHITELIST_PREFIX):
+                return self.get_response(request)
+            # 其他 /api/ 路由需要登錄
+            if not request.user.is_authenticated:
+                return JsonResponse(
+                    {'code': 401, 'message': '請先登錄', 'data': None, 'timestamp': None},
+                    status=401
+                )
 
         return self.get_response(request)

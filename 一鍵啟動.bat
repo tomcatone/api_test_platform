@@ -49,6 +49,12 @@ if not exist "venv\Scripts\python.exe" (
     echo.
 )
 
+echo Checking dependencies...
+venv\Scripts\pip install -r requirements.txt -q 2>nul
+if errorlevel 1 (
+    venv\Scripts\pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple -q 2>nul
+)
+
 echo Applying database migrations...
 venv\Scripts\python manage.py migrate --verbosity 0 2>nul
 

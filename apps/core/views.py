@@ -365,7 +365,7 @@ def api_list(request):
         # 即使未執行 migrate，也能正常查詢
         BRIEF_FIELDS = [
             'id','name','method','url','category_id','category',
-            'encrypted','use_async','use_session',
+            'encrypted','use_async','use_session','cookie',
             'sort_order','description','created_at','updated_at',
         ]
         qs = ApiConfig.objects.select_related('category').only(*BRIEF_FIELDS)
@@ -422,8 +422,11 @@ def _api_to_dict(api, brief=True):
         'encrypted':      _safe(api, 'encrypted', False),
         'use_async':      _safe(api, 'use_async', False),
         'use_session':    _safe(api, 'use_session', False),
+        'cookie':         getattr(api, 'cookie', '') or '',
         'repeat_enabled': bool(_safe(api, 'repeat_enabled', False)),
-        'repeat_count':   int(_safe(api, 'repeat_count', 1) or 1),
+        'repeat_count':    int(_safe(api, 'repeat_count', 1) or 1),
+        'allow_redirects': bool(_safe(api, 'allow_redirects', True)),
+        'use_oauth2':      bool(_safe(api, 'use_oauth2', False)),
         'sort_order': api.sort_order, 'description': api.description,
         'created_at': api.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         'updated_at': api.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
@@ -433,6 +436,7 @@ def _api_to_dict(api, brief=True):
             'content_type': api.content_type,
             'body_type': api.body_type,
             'use_session': api.use_session,
+            'cookie': getattr(api, 'cookie', '') or '',
             'headers': api.headers, 'params': api.params, 'body': api.body,
             'extract_vars': api.extract_vars,
             'assertions': api.assertions,
@@ -442,19 +446,35 @@ def _api_to_dict(api, brief=True):
             'encrypted': api.encrypted,
             'encryption_key': api.encryption_key,
             'encryption_algorithm': api.encryption_algorithm,
+            'encryption_wrapper_key': getattr(api, 'encryption_wrapper_key', '') or 'encrypted',
             'timeout': api.timeout,
             'ssl_verify': _safe(api, 'ssl_verify', 'true') or 'true',
             'ssl_cert':   _safe(api, 'ssl_cert', '') or '',
+            'request_verify': _safe(api, 'request_verify', '') or '',
             'client_cert_enabled': bool(_safe(api, 'client_cert_enabled', False)),
             'client_cert':         _safe(api, 'client_cert', '') or '',
             'client_key':          _safe(api, 'client_key', '') or '',
             'pre_sql_db_id': api.pre_sql_db_id,
             'pre_sql': api.pre_sql,
+            'pre_sql_extract_vars': getattr(api, 'pre_sql_extract_vars', '[]') or '[]',
             'post_sql_db_id': api.post_sql_db_id,
             'post_sql': api.post_sql,
+            'post_sql_extract_vars': getattr(api, 'post_sql_extract_vars', '[]') or '[]',
             'pre_redis_rules': getattr(api, 'pre_redis_rules', '[]') or '[]',
             'repeat_enabled': bool(_safe(api, 'repeat_enabled', False)),
             'repeat_count':   int(_safe(api, 'repeat_count', 1) or 1),
+            # OAuth2 Authorization Code Flow
+            'use_oauth2':             bool(_safe(api, 'use_oauth2', False)),
+            'oauth2_base_url':        _safe(api, 'oauth2_base_url', '') or '',
+            'oauth2_client_id':       _safe(api, 'oauth2_client_id', '') or '',
+            'oauth2_client_secret':   _safe(api, 'oauth2_client_secret', '') or '',
+            'oauth2_redirect_uri':    _safe(api, 'oauth2_redirect_uri', '') or '',
+            'oauth2_scope':           _safe(api, 'oauth2_scope', '') or '',
+            'oauth2_username':        _safe(api, 'oauth2_username', '') or '',
+            'oauth2_password':        '',  # 密碼不回傳前端，保存時若為空則保留原值
+            'oauth2_has_password':     bool(_safe(api, 'oauth2_password', '')),  # 是否已設置密碼
+            'oauth2_allow_redirects': bool(_safe(api, 'oauth2_allow_redirects', True)),
+            'oauth2_verify':          bool(_safe(api, 'oauth2_verify', False)),
         })
     return d
 
@@ -499,21 +519,39 @@ def _create_or_update_api(api, body):
         'encrypted': bool(body.get('encrypted', False)),
         'encryption_key': body.get('encryption_key', ''),
         'encryption_algorithm': body.get('encryption_algorithm', 'AES'),
+                    'encryption_wrapper_key': (body.get('encryption_wrapper_key') or 'encrypted').strip() or 'encrypted',
         'body_enc_rules': _vj(body.get('body_enc_rules'), '[]'),
         'use_async': bool(body.get('use_async', False)),
         'use_session': bool(body.get('use_session', False)),
+        'cookie':     (body.get('cookie', '') or '').strip(),
         'body_type': body.get('body_type', 'json'),
         'deepdiff_assertions': _vj(body.get('deepdiff_assertions'), '[]'),
         'timeout': int(body.get('timeout', 30)),
         'ssl_verify': body.get('ssl_verify', 'true') or 'true',
         'ssl_cert':   body.get('ssl_cert', '') or '',
+        'request_verify':  (body.get('request_verify', '') or '').strip(),
+        'allow_redirects':        bool(body.get('allow_redirects', True)),
+        'use_oauth2':             bool(body.get('use_oauth2', False)),
+        'oauth2_base_url':        (body.get('oauth2_base_url', '') or '').strip(),
+        'oauth2_client_id':       (body.get('oauth2_client_id', '') or '').strip(),
+        'oauth2_client_secret':   (body.get('oauth2_client_secret', '') or '').strip(),
+        'oauth2_redirect_uri':    (body.get('oauth2_redirect_uri', '') or '').strip(),
+        'oauth2_scope':           (body.get('oauth2_scope', '') or '').strip(),
+        'oauth2_username':        (body.get('oauth2_username', '') or '').strip(),
+        # 密碼為空時保留 DB 現有值（前端不回傳密碼，防止覆蓋）
+        'oauth2_password':        (lambda p, inst: p if p else (getattr(inst, 'oauth2_password', '') or ''))(
+                                      (body.get('oauth2_password', '') or '').strip(), api),
+        'oauth2_allow_redirects': bool(body.get('oauth2_allow_redirects', True)),
+        'oauth2_verify':          bool(body.get('oauth2_verify', False)),
         'client_cert_enabled': bool(body.get('client_cert_enabled', False)),
         'client_cert':         body.get('client_cert', '') or '',
         'client_key':          body.get('client_key', '') or '',
         'pre_sql_db_id': body.get('pre_sql_db_id') or None,
         'pre_sql': body.get('pre_sql', ''),
+        'pre_sql_extract_vars': _vj(body.get('pre_sql_extract_vars'), '[]'),
         'post_sql_db_id': body.get('post_sql_db_id') or None,
         'post_sql': body.get('post_sql', ''),
+        'post_sql_extract_vars': _vj(body.get('post_sql_extract_vars'), '[]'),
         'pre_redis_rules': _vj(body.get('pre_redis_rules'), '[]'),
         'repeat_enabled': bool(body.get('repeat_enabled', False)),
         'repeat_count':   max(1, min(int(body.get('repeat_count', 1) or 1), 100)),
@@ -554,7 +592,15 @@ def api_run_single(request, pk):
     results_list = []
     total_time   = 0
     passed = failed = error_cnt = 0
+    # 幂等性測試：快照執行前的 runtime 變量，每次重複從相同基線出發
+    from apps.core.executor import get_runtime_vars, set_runtime_var, _runtime_vars, _runtime_lock
+    pre_repeat_snapshot = get_runtime_vars()
     for i in range(repeat_count):
+        if i > 0 and repeat_count > 1:
+            # 重置為快照狀態，保證每次 repeat 的初始條件相同
+            with _runtime_lock:
+                _runtime_vars.clear()
+                _runtime_vars.update(pre_repeat_snapshot)
         rd = execute_api(api, extra_vars)
         results_list.append(rd)
         total_time += rd.get('response_time', 0)
@@ -575,15 +621,16 @@ def api_run_single(request, pk):
         duration=total_time / 1000,
     )
     # 保存每次結果
-    for run_rd in results_list:
+    for run_i, run_rd in enumerate(results_list):
         TestResult.objects.create(
             report=report, api=api,
             api_name=run_rd['api_name'], url=run_rd['url'], method=run_rd['method'],
             use_async=run_rd['use_async'],
             request_headers=json.dumps(run_rd['request_headers'], ensure_ascii=False),
             request_params=json.dumps(run_rd['request_params'], ensure_ascii=False),
-            request_body=json.dumps(run_rd['request_body'], ensure_ascii=False),
+            request_body=json.dumps(run_rd['request_body'], ensure_ascii=False, default=str),
             response_status=run_rd['response_status'],
+            response_url=run_rd.get('response_url', ''),
             response_headers=json.dumps(run_rd['response_headers'], ensure_ascii=False),
             response_body=run_rd['response_body'][:10000],
             response_time=run_rd['response_time'],
@@ -595,6 +642,7 @@ def api_run_single(request, pk):
             deepdiff_results=json.dumps(run_rd.get('deepdiff_results', []), ensure_ascii=False, default=str),
             pre_sql_result=run_rd['pre_sql_result'],
             post_sql_result=run_rd['post_sql_result'],
+            repeat_index=run_i,
         )
 
     # 多次執行摘要
@@ -619,17 +667,25 @@ def api_run_single(request, pk):
         'status': rd['status'],
         'use_async': rd['use_async'],
         'use_session': rd.get('use_session', False),
+        'use_oauth2': rd.get('use_oauth2', False),
         'response_status': rd['response_status'],
+        'response_url': rd.get('response_url', ''),
         'response_body': rd['response_body'][:5000],
         'response_time': rd['response_time'],
         'avg_time': avg_time,
         'extracted_vars': rd['extracted_vars'],
+        'extract_failures': rd.get('extract_failures', []),
         'assertion_results': rd['assertion_results'],
         'db_assertion_results': rd['db_assertion_results'],
         'deepdiff_results': rd.get('deepdiff_results', []),
-        'pre_sql_result': _safe_json(rd['pre_sql_result']) if rd['pre_sql_result'] else None,
-        'post_sql_result': _safe_json(rd['post_sql_result']) if rd['post_sql_result'] else None,
+        'pre_sql_result': rd['pre_sql_result'] or None,
+        'post_sql_result': rd['post_sql_result'] or None,
+        'post_sql_skipped': rd.get('post_sql_skipped', False),
+        'pre_sql_extracted': rd.get('pre_sql_extracted', {}),
+        'post_sql_extracted': rd.get('post_sql_extracted', {}),
         'error_message': rd['error_message'],
+        'request_headers': rd.get('request_headers', {}),
+        'request_body': rd.get('request_body', ''),
         'enc_applied': rd.get('enc_applied', []),
         'encrypted_body': rd.get('encrypted_body'),
         'pre_redis_log': rd.get('pre_redis_log', []),
@@ -958,6 +1014,7 @@ def report_detail(request, pk):
             'id': r.id, 'api_name': r.api_name, 'url': r.url,
             'method': r.method, 'use_async': r.use_async,
             'response_status': r.response_status,
+            'response_url': getattr(r, 'response_url', '') or '',
             'response_time': r.response_time, 'status': r.status,
             'error_message': r.error_message,
             'request_headers': _safe_json(r.request_headers),
@@ -968,8 +1025,9 @@ def report_detail(request, pk):
             'assertion_results':    _safe_json(r.assertion_results),
             'db_assertion_results': _safe_json(r.db_assertion_results),
             'deepdiff_results':     _safe_json(r.deepdiff_results),
-            'pre_sql_result':  _safe_json(r.pre_sql_result) if r.pre_sql_result else None,
-            'post_sql_result': _safe_json(r.post_sql_result) if r.post_sql_result else None,
+            'pre_sql_result':  r.pre_sql_result[:500] if r.pre_sql_result else None,
+            'post_sql_result': r.post_sql_result[:500] if r.post_sql_result else None,
+            'extract_failures': [],  # 失敗提取不持久化到DB，歷史報告不顯示
         } for r in results]
     })
 
@@ -1310,6 +1368,25 @@ def scheduled_task_toggle(request, pk):
 
 
 @csrf_exempt
+@csrf_exempt
+def report_bulk_delete(request):
+    """批量刪除測試報告"""
+    if request.method != 'DELETE':
+        return error('方法不允許')
+    body = parse_body(request)
+    ids  = body.get('ids', [])
+    if not ids:
+        return error('請選擇要刪除的報告')
+    # 防止非法輸入
+    try:
+        ids = [int(i) for i in ids]
+    except (ValueError, TypeError):
+        return error('無效的報告 ID')
+    deleted, _ = TestReport.objects.filter(pk__in=ids).delete()
+    return success({'deleted': deleted}, f'成功刪除 {deleted} 條報告')
+
+
+@csrf_exempt
 def send_report_email_view(request):
     """手動發送指定報告郵件"""
     if request.method != 'POST':
@@ -1338,20 +1415,57 @@ def send_report_email_view(request):
 
 @csrf_exempt
 def locust_start(request):
-    """啟動壓測"""
+    """啟動壓測（支援單機 / 本機分散式 / 跨機器分散式）"""
     if request.method != 'POST':
         return error('方法不允許')
     from .locust_runner import start_locust
-    body      = parse_body(request)
-    api_ids   = body.get('api_ids', [])
-    users     = int(body.get('users', 10))
-    spawn_rate = int(body.get('spawn_rate', 2))
-    run_time  = body.get('run_time', '60s')
-    task_id   = body.get('task_id', f'run_{int(time.time())}')
+    body            = parse_body(request)
+    api_ids         = body.get('api_ids', [])
+    users           = int(body.get('users', 10))
+    spawn_rate      = int(body.get('spawn_rate', 2))
+    run_time        = body.get('run_time', '60s')
+    task_id         = body.get('task_id', f'run_{int(time.time())}')
+    mode            = body.get('mode', 'single')   # 'single' | 'distributed' | 'remote'
+    worker_count    = int(body.get('worker_count', 2))
+    remote_workers  = body.get('remote_workers', [])   # list of IP strings
+    master_bind_ip  = body.get('master_bind_ip', '')   # 本機對外 IP（可選）
+    wait_timeout    = int(body.get('wait_timeout', 120))
     if not api_ids:
         return error('請選擇接口')
-    result = start_locust(task_id, api_ids, users, spawn_rate, run_time)
+    if mode == 'remote':
+        # 驗證遠端 IP 列表
+        remote_workers = [ip.strip() for ip in remote_workers if str(ip).strip()]
+        if not remote_workers:
+            return error('跨機器模式需提供至少一個遠端 Worker IP')
+    result = start_locust(task_id, api_ids, users, spawn_rate, run_time,
+                          mode=mode, worker_count=worker_count,
+                          remote_workers=remote_workers,
+                          master_bind_ip=master_bind_ip,
+                          wait_timeout=wait_timeout)
     return success(result, result.get('message', ''))
+
+
+@csrf_exempt
+def locust_remote_config(request, task_id):
+    """提供遠端 Worker 下載的配置 JSON（解決跨機器文件訪問問題）"""
+    from .locust_runner import get_remote_config
+    cfg = get_remote_config(task_id)
+    if cfg is None:
+        return error('任務不存在或配置未就緒')
+    import json as _json
+    from django.http import HttpResponse
+    return HttpResponse(_json.dumps(cfg, ensure_ascii=False),
+                        content_type='application/json; charset=utf-8')
+
+
+@csrf_exempt
+def locust_worker_script(request, task_id):
+    """下載遠端 Worker 引導腳本 worker.py"""
+    from .locust_runner import get_worker_script
+    script = get_worker_script(task_id)
+    from django.http import HttpResponse
+    return HttpResponse(script, content_type='text/plain; charset=utf-8',
+                        headers={'Content-Disposition': 'attachment; filename="worker.py"'})
 
 
 @csrf_exempt

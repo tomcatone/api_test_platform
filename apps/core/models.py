@@ -228,6 +228,10 @@ class ApiConfig(models.Model):
         choices=[('AES', 'AES-CBC'), ('AES-GCM', 'AES-GCM'), ('BASE64', 'BASE64'), ('MD5', 'MD5')],
         verbose_name='加密算法'
     )
+    encryption_wrapper_key = models.CharField(
+        max_length=100, blank=True, default='encrypted',
+        verbose_name='全局加密JSON包裝鍵名（如 data、param、encrypted）'
+    )
     # ── Body 字段級加密規則 (JSON) ──
     # 格式: [{"field":"param","ssrc":"{{payload_json}}","json_dumps":true,"key":"可選覆蓋raw"},
     #         {"field":"url","ssrc":"user/loginAndRegister"}]
@@ -258,6 +262,8 @@ class ApiConfig(models.Model):
         related_name='post_sql_apis', verbose_name='後置SQL數據庫'
     )
     post_sql     = models.TextField(blank=True, default='', verbose_name='後置SQL（請求後執行）')
+    pre_sql_extract_vars  = models.TextField(blank=True, default='[]', verbose_name='前置SQL提取變量規則 (JSON)')
+    post_sql_extract_vars = models.TextField(blank=True, default='[]', verbose_name='後置SQL提取變量規則 (JSON)')
 
     # ── 數據庫斷言規則 ──
     # [{"db_id": 1, "sql": "SELECT count(*) as cnt FROM users WHERE id=1", "field": "cnt", "expected": "1", "operator": "=="}]
@@ -268,6 +274,25 @@ class ApiConfig(models.Model):
 
     # ── Session / body_type ──
     use_session  = models.BooleanField(default=False, verbose_name='使用Session保持會話')
+    cookie          = models.TextField(blank=True, default='', verbose_name='Cookie (key=value; key2=value2)')
+    request_verify   = models.TextField(blank=True, default='', verbose_name='requests verify 參數（空=默認True, false=跳過, 或CA路徑）')
+    allow_redirects  = models.BooleanField(default=True, verbose_name='允許自動重定向 (allow_redirects)')
+
+    # ── OAuth2 認證（requests-oauthlib）──
+    # ── OAuth2 Authorization Code Flow（requests-oauthlib）──
+    use_oauth2             = models.BooleanField(default=False, verbose_name='啟用 OAuth2 認證')
+    oauth2_base_url        = models.CharField(max_length=1000, blank=True, default='', verbose_name='OAuth2 Base URL（如 https://auth.example.com）')
+    oauth2_client_id       = models.CharField(max_length=500, blank=True, default='', verbose_name='OAuth2 Client ID')
+    oauth2_client_secret   = models.CharField(max_length=500, blank=True, default='', verbose_name='OAuth2 Client Secret')
+    oauth2_redirect_uri    = models.CharField(max_length=1000, blank=True, default='', verbose_name='OAuth2 Redirect URI')
+    oauth2_scope           = models.CharField(max_length=500, blank=True, default='', verbose_name='OAuth2 Scope（空格分隔）')
+    oauth2_username        = models.CharField(max_length=200, blank=True, default='', verbose_name='OAuth2 登錄用戶名')
+    oauth2_password        = models.CharField(max_length=200, blank=True, default='', verbose_name='OAuth2 登錄密碼')
+    oauth2_allow_redirects = models.BooleanField(default=True, verbose_name='OAuth2 請求允許重定向')
+    oauth2_verify          = models.BooleanField(default=False, verbose_name='OAuth2 SSL 驗證（False=跳過自簽名憑證）')
+    # 保留舊欄位（向後兼容，新版不使用）
+    oauth2_token_url       = models.CharField(max_length=1000, blank=True, default='', verbose_name='[舊] OAuth2 Token URL')
+    oauth2_extra_params    = models.TextField(blank=True, default='{}', verbose_name='[舊] OAuth2 額外參數 (JSON)')
     body_type    = models.CharField(
         max_length=20, default='json',
         choices=[
@@ -356,6 +381,14 @@ class ApiConfig(models.Model):
         try: return json.loads(self.extract_vars)
         except: return []
 
+    def get_pre_sql_extract_vars(self):
+        try: return json.loads(self.pre_sql_extract_vars)
+        except: return []
+
+    def get_post_sql_extract_vars(self):
+        try: return json.loads(self.post_sql_extract_vars)
+        except: return []
+
     def get_assertions(self):
         try: return json.loads(self.assertions)
         except: return []
@@ -421,6 +454,7 @@ class TestResult(models.Model):
     request_body     = models.TextField(default='{}')
     response_status  = models.IntegerField(default=0)
     response_headers = models.TextField(default='{}')
+    response_url     = models.TextField(default='', blank=True)  # 最終響應URL（含重定向）
     response_body    = models.TextField(default='')
     response_time    = models.FloatField(default=0.0)
     status           = models.CharField(max_length=20, choices=STATUS_CHOICES)
@@ -432,12 +466,13 @@ class TestResult(models.Model):
     pre_sql_result   = models.TextField(default='')         # ← 新增
     post_sql_result  = models.TextField(default='')         # ← 新增
     use_async        = models.BooleanField(default=False)   # ← 新增
+    repeat_index     = models.IntegerField(default=0)          # 第幾次重複執行（0=第1次）
     created_at       = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = '測試結果'
         verbose_name_plural = '測試結果'
-        ordering = ['created_at']
+        ordering = ['repeat_index', 'created_at']
 
     def __str__(self):
         return f'{self.api_name} - {self.status}'

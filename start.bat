@@ -8,6 +8,13 @@ if not exist "venv\Scripts\python.exe" (
     pause & exit /b 1
 )
 
+echo Checking dependencies...
+venv\Scripts\pip install -r requirements.txt -q
+if errorlevel 1 (
+    echo Retrying with mirror...
+    venv\Scripts\pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple -q
+)
+
 venv\Scripts\python manage.py migrate --verbosity 0 2>nul
 
 set PORT=8000
