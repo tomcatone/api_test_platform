@@ -147,40 +147,79 @@ def _get_local_ip() -> str:
 # 公共 User 腳本生成（Master 和 Worker 共用同一段 user 定義）
 # ══════════════════════════════════════════════════════════════
 _USER_FACTORY = r"""
+# ── Gevent monkey-patch SSL 修復（Python 3.10 / 3.13 通用方案）──
+# 根本原因：gevent.monkey.patch_all() 會 monkey-patch ssl 模組
+#   Python 3.10-3.12：minimum_version 是 getset_descriptor，沒有 .setter → AttributeError
+#   Python 3.13    ：ssl.py 的 setter 呼叫 super()，patch 後形成遞迴 → RecursionError
+# 解決方案：讓 gevent.monkey.patch_all() 跳過 ssl（locust 不需要 ssl monkey-patch）
+try:
+    import gevent.monkey as _gm
+    def _gm_no_ssl(*_a, _orig=_gm.patch_all, **_kw):
+        _kw['ssl'] = False
+        return _orig(*_a, **_kw)
+    _gm.patch_all = _gm_no_ssl
+    del _gm, _gm_no_ssl
+except Exception:
+    pass
+
+# Suppress all SSL/TLS warnings (InsecureRequestWarning etc.)
+import warnings as _warnings_ssl
+_warnings_ssl.filterwarnings('ignore', message='.*InsecureRequest.*')
+_warnings_ssl.filterwarnings('ignore', message='.*SSL.*')
+try:
+    import urllib3 as _urllib3_ssl; _urllib3_ssl.disable_warnings()
+except Exception: pass
+
 import re as _re, os as _os, base64 as _b64, json as _json_enc, copy as _copy
 
 # ── 加密工具（與 executor.py 保持一致，AES-GCM / AES-CBC）──
 def _encrypt_aes_gcm(plain_text, key_str):
+    # !! 密鑰派生必須與 executor.encrypt_gcm 完全一致 !!
+    # executor: ljust 到最近的 16/24/32，不截斷
     try:
         from Crypto.Cipher import AES as _AES
-        from Crypto.Random import get_random_bytes
-        key = (key_str.encode('utf-8') + b'\x00'*32)[:32]
-        iv  = get_random_bytes(12)
-        cipher = _AES.new(key, _AES.MODE_GCM, nonce=iv)
-        ct, tag = cipher.encrypt_and_digest(
-            plain_text.encode('utf-8') if isinstance(plain_text, str) else plain_text)
+        raw_bytes = key_str.encode('utf-8')
+        for _klen in (16, 24, 32):
+            if len(raw_bytes) <= _klen:
+                raw_bytes = raw_bytes.ljust(_klen, b'\x00')
+                break
+        else:
+            raw_bytes = raw_bytes[:32]
+        iv = _os.urandom(12)
+        cipher = _AES.new(raw_bytes, _AES.MODE_GCM, nonce=iv)
+        _src = plain_text.encode('utf-8') if isinstance(plain_text, str) else plain_text
+        ct, tag = cipher.encrypt_and_digest(_src)
         return _b64.b64encode(iv + ct + tag).decode('utf-8')
     except Exception as _e:
         print(f'[Locust-Encrypt-GCM] error: {_e}')
         return plain_text
 
 def _encrypt_aes_cbc(plain_text, key_str):
+    # !! 密鑰派生必須與 executor.encrypt_body(AES) 完全一致 !!
     try:
         from Crypto.Cipher import AES as _AES
         from Crypto.Util.Padding import pad
-        key = (key_str.encode('utf-8') + b'\x00'*32)[:32]
-        iv  = _os.urandom(16)
-        cipher = _AES.new(key, _AES.MODE_CBC, iv)
+        raw_bytes = key_str.encode('utf-8')
+        for _klen in (16, 24, 32):
+            if len(raw_bytes) <= _klen:
+                raw_bytes = raw_bytes.ljust(_klen, b'\x00')
+                break
+        else:
+            raw_bytes = raw_bytes[:32]
+        cipher = _AES.new(raw_bytes, _AES.MODE_CBC)
         ct = cipher.encrypt(pad(
             plain_text.encode('utf-8') if isinstance(plain_text, str) else plain_text,
             _AES.block_size))
-        return _b64.b64encode(iv + ct).decode('utf-8')
+        return _json_enc.dumps({
+            'iv':   _b64.b64encode(cipher.iv).decode(),
+            'data': _b64.b64encode(ct).decode()
+        })
     except Exception as _e:
         print(f'[Locust-Encrypt-CBC] error: {_e}')
         return plain_text
 
 def _apply_body_encryption(body, body_type, api_cfg):
-    # 複製 executor.py 的加密邏輯：字段級 AES-GCM（優先）或全局加密
+    # 與 executor.apply_body_enc_rules + encrypt_body 完全對齊
     enc_key   = (api_cfg.get('encryption_key', '') or '').strip()
     encrypted = api_cfg.get('encrypted', False)
     enc_algo  = (api_cfg.get('encryption_algorithm', 'AES') or 'AES').upper()
@@ -190,18 +229,35 @@ def _apply_body_encryption(body, body_type, api_cfg):
     if not enc_key:
         return body, body_type   # 無密鑰 → 明文發送
 
-    # 字段級加密（優先於全局）
-    if rules and isinstance(body, dict):
-        body = _copy.deepcopy(body)
+    # ── 字段級加密（優先，與 executor.apply_body_enc_rules 完全對齊）──
+    if rules:
+        result = dict(body) if isinstance(body, dict) else {}
         for rule in rules:
-            field = rule.get('field', '')
-            if field in body:
-                val = body[field]
-                ssrc = str(val) if not isinstance(val, str) else val
-                body[field] = _encrypt_aes_gcm(ssrc, enc_key)
-        return body, body_type
+            field    = (rule.get('field', '') or '').strip()
+            ssrc_tpl = (rule.get('ssrc', '') or '').strip()
+            raw      = (rule.get('raw', '') or '').strip() or enc_key
+            do_dumps = bool(rule.get('json_dumps', False))
+            if not field:
+                continue
+            if not raw:
+                continue
+            # ssrc: 若有指定用 ssrc，否則從 body 取同名字段
+            if ssrc_tpl:
+                ssrc_str = ssrc_tpl
+            else:
+                val = result.get(field, '')
+                ssrc_str = str(val) if not isinstance(val, str) else val
+            # json_dumps 模式
+            if do_dumps:
+                try:
+                    val_obj = _json_enc.loads(ssrc_str)
+                    ssrc_str = _json_enc.dumps(val_obj, ensure_ascii=False)
+                except Exception:
+                    ssrc_str = _json_enc.dumps(ssrc_str, ensure_ascii=False)
+            result[field] = _encrypt_aes_gcm(ssrc_str, raw)
+        return result, body_type
 
-    # 全局加密
+    # ── 全局加密（與 executor.encrypt_body 完全對齊）──
     if encrypted:
         bs = (_json_enc.dumps(body, ensure_ascii=False)
               if isinstance(body, (dict, list)) else str(body or ''))
@@ -340,10 +396,23 @@ def _make_user_class(apis):
 # 單機 Worker 腳本（LocalRunner）
 # ══════════════════════════════════════════════════════════════
 _SINGLE_WORKER_SCRIPT = _USER_FACTORY + r"""
-import sys, json, time
-CONFIG_PATH = sys.argv[1]
-STATUS_PATH = sys.argv[2]
-RESULT_PATH = sys.argv[3]
+import sys, json, time, os
+
+
+
+import warnings
+warnings.filterwarnings('ignore')
+try:
+    import urllib3
+    urllib3.disable_warnings()
+except Exception:
+    pass
+
+
+CONFIG_PATH    = sys.argv[1]
+STATUS_PATH    = sys.argv[2]
+RESULT_PATH    = sys.argv[3]
+STOP_FLAG_PATH = sys.argv[4] if len(sys.argv) > 4 else ''
 
 with open(CONFIG_PATH, encoding='utf-8') as f:
     cfg = json.load(f)
@@ -395,12 +464,19 @@ gevent.spawn(_updater)
 runner.start(user_count=USERS, spawn_rate=SPAWN_RATE)
 write_status('ramping', active_users=0, total_requests=0, total_failures=0)
 
-# 支援中途 stop：每秒檢查是否超時
+def _should_stop():
+    if STOP_FLAG_PATH and os.path.exists(STOP_FLAG_PATH):
+        return True
+    return False
+
+# Main loop: check both duration and stop flag
 elapsed = 0
 while elapsed < DURATION:
     gevent.sleep(1)
     elapsed += 1
     if runner.state in ('stopped', 'stopping'):
+        break
+    if _should_stop():
         break
 
 runner.stop()
@@ -423,6 +499,7 @@ for name, entry in runner.stats.entries.items():
         'total_rps':round(entry.total_rps,2)})
 
 total = runner.stats.total
+_partial = _should_stop() or elapsed < DURATION  # 中途停止標記
 all_stats.append({'name':'Aggregated','method':'',
     'num_requests':total.num_requests,'num_failures':total.num_failures,
     'avg_response_time':round(total.avg_response_time,2),
@@ -430,15 +507,19 @@ all_stats.append({'name':'Aggregated','method':'',
     'max_response_time':round(total.max_response_time or 0,2),
     'response_times':{'50':_pct(total,50),'75':_pct(total,75),
         '90':_pct(total,90),'95':_pct(total,95),'99':_pct(total,99)},
-    'total_rps':round(total.total_rps,2)})
+    'total_rps':round(total.total_rps,2),
+    '_partial': _partial})
 
 with open(RESULT_PATH,'w',encoding='utf-8') as f:
     json.dump(all_stats, f, ensure_ascii=False)
-write_status('completed', active_users=0,
+
+_status = 'stopped' if _partial else 'completed'
+write_status(_status, active_users=0,
     total_requests=total.num_requests, total_failures=total.num_failures,
     elapsed=round(time.time()-START_TIME,1))
 try: env.runner.quit()
 except Exception: pass
+
 """
 
 
@@ -447,12 +528,21 @@ except Exception: pass
 # ══════════════════════════════════════════════════════════════
 _DIST_MASTER_SCRIPT = _USER_FACTORY + r"""
 import sys, json, time
+import warnings
+warnings.filterwarnings('ignore', message='.*InsecureRequestWarning.*')
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
+
 CONFIG_PATH     = sys.argv[1]
 STATUS_PATH     = sys.argv[2]
 RESULT_PATH     = sys.argv[3]
 MASTER_PORT     = int(sys.argv[4])
 EXPECT_WORKERS  = int(sys.argv[5])
-WAIT_TIMEOUT    = int(sys.argv[6]) if len(sys.argv) > 6 else 120  # 可配置等待逾時
+WAIT_TIMEOUT    = int(sys.argv[6]) if len(sys.argv) > 6 else 120
+STOP_FLAG_PATH  = sys.argv[7] if len(sys.argv) > 7 else ''  # 可配置等待逾時
 
 with open(CONFIG_PATH, encoding='utf-8') as f:
     cfg = json.load(f)
@@ -532,11 +622,18 @@ def _updater():
 gevent.spawn(_updater)
 
 # 支援中途 stop：每秒檢查
+import os as _os_m
+
+def _should_stop_m():
+    return bool(STOP_FLAG_PATH and _os_m.path.exists(STOP_FLAG_PATH))
+
 elapsed = 0
 while elapsed < DURATION:
     gevent.sleep(1)
     elapsed += 1
     if runner.state in ('stopped', 'stopping'):
+        break
+    if _should_stop_m():
         break
 
 runner.stop()
@@ -586,6 +683,13 @@ except Exception: pass
 # ══════════════════════════════════════════════════════════════
 _DIST_LOCAL_WORKER_SCRIPT = _USER_FACTORY + r"""
 import sys, json
+import warnings
+warnings.filterwarnings('ignore', message='.*InsecureRequestWarning.*')
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
 CONFIG_PATH = sys.argv[1]
 MASTER_HOST = sys.argv[2]
 MASTER_PORT = int(sys.argv[3])
@@ -704,15 +808,16 @@ def start_locust(task_id: str, api_ids: list,
     work_dir = os.path.join(tempfile.gettempdir(), 'locust_presstest')
     os.makedirs(work_dir, exist_ok=True)
 
-    config_path = os.path.join(work_dir, f'config_{task_id}.json')
-    status_path = os.path.join(work_dir, f'status_{task_id}.json')
-    result_path = os.path.join(work_dir, f'result_{task_id}.json')
+    config_path    = os.path.join(work_dir, f'config_{task_id}.json')
+    status_path    = os.path.join(work_dir, f'status_{task_id}.json')
+    result_path    = os.path.join(work_dir, f'result_{task_id}.json')
+    stop_flag_path = os.path.join(work_dir, f'stop_{task_id}.flag')
 
     with open(config_path, 'w', encoding='utf-8') as f:
         json.dump({'apis': api_payloads, 'users': users,
                    'spawn_rate': spawn_rate, 'duration': duration}, f, ensure_ascii=False)
 
-    for p in (status_path, result_path):
+    for p in (status_path, result_path, stop_flag_path):
         try: os.remove(p)
         except FileNotFoundError: pass
 
@@ -735,7 +840,8 @@ def start_locust(task_id: str, api_ids: list,
             master_proc = subprocess.Popen(
                 [sys.executable, master_script,
                  config_path, status_path, result_path,
-                 str(master_port), str(worker_count), str(wait_timeout)],
+                 str(master_port), str(worker_count), str(wait_timeout),
+                 stop_flag_path],
                 stdout=master_log_fh,
                 stderr=subprocess.STDOUT,
             )
@@ -836,7 +942,7 @@ def start_locust(task_id: str, api_ids: list,
         try:
             proc = subprocess.Popen(
                 [sys.executable, single_script,
-                 config_path, status_path, result_path],
+                 config_path, status_path, result_path, stop_flag_path],
                 stdout=slog_fh,
                 stderr=subprocess.STDOUT,
             )
@@ -858,6 +964,7 @@ def start_locust(task_id: str, api_ids: list,
             'status_path': status_path,
             'result_path': result_path,
             'config_path': config_path,
+            'stop_flag_path': stop_flag_path,
             'api_ids':    api_ids,
             'users':      users,
             'run_time':   run_time,
@@ -951,6 +1058,25 @@ def stop_locust(task_id: str) -> dict:
     if not info:
         return {'success': False, 'message': '任務不存在'}
 
+    _sfp         = info.get('stop_flag_path', '')
+    _result_path = info.get('result_path', '')
+    _status_path = info.get('status_path', '')
+
+    # ── Step 1: 寫 stop flag，給子進程機會優雅退出並寫結果 ──
+    if _sfp:
+        try:
+            with open(_sfp, 'w') as _ff:
+                _ff.write('stop')
+        except Exception:
+            pass
+
+    # ── Step 2: 最多等 4 秒，輪詢等結果文件出現 ──
+    for _wi in range(8):          # 8 × 0.5s = 4s
+        time.sleep(0.5)
+        if _result_path and os.path.exists(_result_path):
+            break                 # 子進程已自行寫好結果，不需要強殺
+
+    # ── Step 3: 強制終止所有子進程 ──
     killed = []
     for name, proc in info.get('procs', []):
         try:
@@ -960,31 +1086,27 @@ def stop_locust(task_id: str) -> dict:
         except Exception:
             pass
 
-    # 等待進程退出，防止殭屍進程
     for name, proc in info.get('procs', []):
         try:
             proc.wait(timeout=5)
         except Exception:
             pass
 
-    # FIX: 關閉所有日誌文件句柄
+    # 關閉日誌文件句柄
     for fh in info.get('log_files', []):
         try:
             fh.close()
         except Exception:
             pass
 
-    # ── FIX: 中途停止時若結果文件不存在，從 status 寫入部分結果 ──
-    _result_path = info.get('result_path', '')
-    _status_path = info.get('status_path', '')
-    time.sleep(0.3)   # 給子進程最後寫盤的機會
+    # ── Step 4: 如果結果文件仍不存在，從 status 生成部分結果（兜底）──
     if _result_path and not os.path.exists(_result_path):
         try:
             _st = {}
             if _status_path and os.path.exists(_status_path):
                 with open(_status_path, encoding='utf-8') as _sf:
                     _st = json.load(_sf)
-            _partial = [{
+            _fallback = [{
                 'name': 'Aggregated', 'method': '',
                 'num_requests':  _st.get('total_requests', 0),
                 'num_failures':  _st.get('total_failures', 0),
@@ -994,8 +1116,7 @@ def stop_locust(task_id: str) -> dict:
                 '_partial': True,
             }]
             with open(_result_path, 'w', encoding='utf-8') as _rf:
-                import json as _json2
-                _json2.dump(_partial, _rf, ensure_ascii=False)
+                json.dump(_fallback, _rf, ensure_ascii=False)
         except Exception:
             pass
 
